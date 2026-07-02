@@ -1,6 +1,7 @@
 import { ALLOWED_SYMBOLS, MAX_BULK_SYMBOLS } from "./config.js";
 import { NewsError, ValidationError } from "./errors.js";
 import { fetchStockQuote } from "./fetchStockQuote.js";
+import { fetchUsMarketNews } from "./fetchUsMarketNews.js";
 
 function normalizeSymbol(symbol) {
   const normalized = String(symbol).trim().toUpperCase();
@@ -45,21 +46,31 @@ function serializeError(error) {
 }
 
 /**
- * Fetch regular-session and extended-hours quotes for multiple US tickers.
+ * Fetch quotes and company news for multiple US tickers.
  * @param {string[]} symbols
- * @returns {Promise<Array<{ symbol: string, quote: object | null, error?: object }>>}
+ * @param {{ limit?: number }} [options]
+ * @returns {Promise<Array<{ symbol: string, quote: object | null, articles: object[], quoteError?: object, articlesError?: object }>>}
  */
-export async function fetchStockQuotes(symbols) {
+export async function fetchBulkSymbolInfo(symbols, { limit } = {}) {
   const normalizedSymbols = validateSymbols(symbols);
   const results = [];
 
   for (const symbol of normalizedSymbols) {
+    const entry = { symbol, quote: null, articles: [] };
+
     try {
-      const quote = await fetchStockQuote(symbol);
-      results.push({ symbol, quote });
+      entry.quote = await fetchStockQuote(symbol);
     } catch (error) {
-      results.push({ symbol, quote: null, error: serializeError(error) });
+      entry.quoteError = serializeError(error);
     }
+
+    try {
+      entry.articles = await fetchUsMarketNews({ symbol, limit });
+    } catch (error) {
+      entry.articlesError = serializeError(error);
+    }
+
+    results.push(entry);
   }
 
   return results;
