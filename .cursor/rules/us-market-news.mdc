@@ -1,0 +1,68 @@
+---
+description: Rules for developing the US stock market news fetcher tool
+globs:
+  - src/news/**
+  - tools/us-market-news/**
+  - docs/us-market-news.md
+  - .env.example
+---
+
+# US Market News Tool — Development Rules
+
+## Scope
+
+- Build and maintain **US stock market news fetching** only.
+- Do **not** add stock price prediction, trading signals, or investment advice logic.
+- Keep the Parcel demo (`src/index3.js`) separate from the news tool unless explicitly requested.
+
+## Secrets
+
+- API keys live in `.env` only. Never commit, log, or hardcode them.
+- Read keys via `process.env.FINNHUB_API_KEY` after loading dotenv in CLI entry points.
+- Update `.env.example` when adding new required environment variables (names and descriptions only).
+
+## Dependencies
+
+- Add only what the news fetcher needs (e.g. `dotenv`). Prefer Node 22 built-in `fetch`.
+- Do not add UI frameworks or unrelated packages for this tool.
+
+## Error handling
+
+- Never silently return an empty array on API failure.
+- Throw typed errors from `src/news/errors.js` so callers can distinguish validation, auth, rate-limit, timeout, and upstream failures.
+
+## Rate limits and quotas
+
+- Respect free-tier limits. Use constants from `src/news/config.js`:
+  - `RATE_LIMIT_MS` between consecutive requests
+  - `MAX_ARTICLES` cap on returned items
+  - `REQUEST_TIMEOUT_MS` for HTTP calls
+- Do not add retry loops that could exhaust daily quotas.
+
+## Output schema
+
+Normalize all sources to this shape before returning (Japanese + original English):
+
+```json
+{
+  "title": "日本語タイトル",
+  "titleOriginal": "English headline",
+  "url": "string",
+  "publishedAt": "ISO-8601 string",
+  "source": "string",
+  "summary": "日本語要約 (optional)",
+  "summaryOriginal": "English summary (optional)"
+}
+```
+
+When a symbol is provided, also return `quote` via `fetchStockQuote.js` with `regularSession` and `latestTrade` (24h extended hours via `trade=true`).
+
+## Privacy
+
+- Do not persist or log personally identifiable information (PII).
+- Log only error types and non-sensitive metadata (symbol, count, status code).
+
+## Disclaimer
+
+- Fetched data is informational only, not investment advice.
+- Include or preserve disclaimer text in CLI output and documentation.
