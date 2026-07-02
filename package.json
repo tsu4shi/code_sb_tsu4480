@@ -2,12 +2,17 @@
   "name": "vanilla",
   "version": "1.0.0",
   "description": "JavaScript example starter project",
+  "type": "module",
   "main": "index.html",
   "scripts": {
     "start": "parcel index.html --open",
-    "build": "parcel build index.html"
+    "build": "parcel build index.html",
+    "news": "node tools/us-market-news/cli.js"
   },
-  "dependencies": { "parcel-bundler": "^1.6.1" },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "parcel-bundler": "^1.6.1"
+  },
   "devDependencies": {
     "@babel/core": "7.2.0",
     "typescript": "4.4.4"
