@@ -7,7 +7,8 @@
   "scripts": {
     "start": "parcel index.html --open",
     "build": "parcel build index.html",
-    "news": "node tools/us-market-news/cli.js"
+    "news": "node tools/us-market-news/cli.js",
+    "quotes": "node tools/stock-quotes/cli.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

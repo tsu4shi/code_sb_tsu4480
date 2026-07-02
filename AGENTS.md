@@ -31,6 +31,7 @@ A separate **Node CLI** fetches US stock market news via the Finnhub API. It is 
 
 - Run the CLI and inspect JSON stdout — do **not** use the Parcel browser console for news tool verification
 - Example: `npm run news` (general market) or `npm run news -- --symbol AAPL`
+- Bulk quotes: `npm run quotes -- AAPL GOOG MSFT` (see `.cursor/skills/bulk-stock-quotes/SKILL.md`)
 - Without a valid API key, expect a typed `ConfigError`, not an empty result
 
 ### Scope limits
