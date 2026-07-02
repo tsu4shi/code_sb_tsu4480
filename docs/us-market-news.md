@@ -72,20 +72,29 @@ Each article is normalized to:
 
 ```json
 {
-  "title": "Article headline",
+  "title": "日本語タイトル",
+  "titleOriginal": "English headline",
   "url": "https://example.com/article",
   "publishedAt": "2026-07-02T12:00:00.000Z",
   "source": "Reuters",
-  "summary": "Optional short summary"
+  "summary": "日本語要約（任意）",
+  "summaryOriginal": "English summary (optional)"
 }
 ```
+
+When `--symbol` is provided, the CLI also returns a `quote` object with regular-session and 24-hour extended-hours prices (`latestTrade` uses Finnhub `trade=true`).
 
 CLI output wraps articles with metadata:
 
 ```json
 {
-  "disclaimer": "For informational purposes only. Not investment advice.",
-  "query": { "symbol": "AAPL", "limit": 10 },
+  "disclaimer": "情報提供のみを目的としています。投資助言ではありません。",
+  "query": { "symbol": "GOOG", "limit": 10 },
+  "quote": {
+    "regularSession": { "price": 357.89, "sessionLabel": "通常取引（9:30-16:00 ET）" },
+    "latestTrade": { "price": 355.68, "sessionLabel": "時間外取引（プレマーケット/アフターマーケット含む最新値）" },
+    "extendedHoursActive": true
+  },
   "articles": [ ... ]
 }
 ```

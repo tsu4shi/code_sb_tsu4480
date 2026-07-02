@@ -41,17 +41,21 @@ globs:
 
 ## Output schema
 
-Normalize all sources to this shape before returning:
+Normalize all sources to this shape before returning (Japanese + original English):
 
 ```json
 {
-  "title": "string",
+  "title": "日本語タイトル",
+  "titleOriginal": "English headline",
   "url": "string",
   "publishedAt": "ISO-8601 string",
   "source": "string",
-  "summary": "string (optional)"
+  "summary": "日本語要約 (optional)",
+  "summaryOriginal": "English summary (optional)"
 }
 ```
+
+When a symbol is provided, also return `quote` via `fetchStockQuote.js` with `regularSession` and `latestTrade` (24h extended hours via `trade=true`).
 
 ## Privacy
 

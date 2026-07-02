@@ -8,3 +8,12 @@ export const FINNHUB_BASE_URL = "https://finnhub.io/api/v1";
 
 /** Default lookback window for company-news queries (days). */
 export const COMPANY_NEWS_LOOKBACK_DAYS = 7;
+
+/** Delay between translation requests (MyMemory free tier). */
+export const TRANSLATION_DELAY_MS = 250;
+
+/** Max characters per translation request. */
+export const MAX_TRANSLATION_CHARS = 500;
+
+export const DISCLAIMER_JA =
+  "情報提供のみを目的としています。投資助言ではありません。";

@@ -1,31 +1,15 @@
 import {
   ALLOWED_SYMBOLS,
   COMPANY_NEWS_LOOKBACK_DAYS,
-  FINNHUB_BASE_URL,
   MAX_ARTICLES,
-  RATE_LIMIT_MS,
-  REQUEST_TIMEOUT_MS,
-  REQUIRED_ENV,
 } from "./config.js";
 import {
-  AuthError,
-  ConfigError,
-  RateLimitError,
-  TimeoutError,
   UpstreamError,
   ValidationError,
 } from "./errors.js";
+import { buildUrl, fetchJson, getApiKey } from "./finnhubClient.js";
 import { filterValidArticles, normalizeFinnhubArticle } from "./normalize.js";
-
-let lastRequestAt = 0;
-
-function assertEnv() {
-  for (const key of REQUIRED_ENV) {
-    if (!process.env[key]) {
-      throw new ConfigError(`Missing required environment variable: ${key}`);
-    }
-  }
-}
+import { translateArticleToJapanese } from "./translateToJapanese.js";
 
 function validateLimit(limit) {
   const parsed = limit === undefined ? MAX_ARTICLES : Number(limit);
@@ -48,77 +32,17 @@ function validateSymbol(symbol) {
   return normalized;
 }
 
-async function enforceRateLimit() {
-  const now = Date.now();
-  const elapsed = now - lastRequestAt;
-  if (elapsed < RATE_LIMIT_MS) {
-    await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_MS - elapsed));
-  }
-  lastRequestAt = Date.now();
-}
-
 function formatDate(date) {
   return date.toISOString().slice(0, 10);
 }
 
-function buildUrl(path, params) {
-  const url = new URL(`${FINNHUB_BASE_URL}${path}`);
-  for (const [key, value] of Object.entries(params)) {
-    url.searchParams.set(key, value);
-  }
-  return url.toString();
-}
-
-async function fetchJson(url) {
-  await enforceRateLimit();
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-
-    if (response.status === 401 || response.status === 403) {
-      throw new AuthError(
-        `Finnhub authentication failed (HTTP ${response.status})`,
-        response.status
-      );
-    }
-    if (response.status === 429) {
-      throw new RateLimitError(
-        "Finnhub rate limit exceeded (HTTP 429)",
-        response.status
-      );
-    }
-    if (!response.ok) {
-      throw new UpstreamError(
-        `Finnhub request failed (HTTP ${response.status})`,
-        response.status
-      );
-    }
-
-    return response.json();
-  } catch (error) {
-    if (error.name === "AbortError") {
-      throw new TimeoutError(
-        `Request timed out after ${REQUEST_TIMEOUT_MS}ms`
-      );
-    }
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 /**
- * Fetch US stock market news from Finnhub.
+ * Fetch US stock market news from Finnhub, translated to Japanese.
  * @param {{ symbol?: string, limit?: number }} options
- * @returns {Promise<Array<{ title: string, url: string, publishedAt: string, source: string, summary?: string }>>}
+ * @returns {Promise<Array<{ title: string, url: string, publishedAt: string, source: string, summary?: string, titleOriginal: string, summaryOriginal?: string }>>}
  */
 export async function fetchUsMarketNews({ symbol, limit } = {}) {
-  assertEnv();
-
-  const apiKey = process.env.FINNHUB_API_KEY;
+  const apiKey = getApiKey();
   const normalizedSymbol = validateSymbol(symbol);
   const articleLimit = validateLimit(limit);
 
@@ -150,5 +74,10 @@ export async function fetchUsMarketNews({ symbol, limit } = {}) {
     data.map(normalizeFinnhubArticle)
   ).slice(0, articleLimit);
 
-  return articles;
+  const translated = [];
+  for (const article of articles) {
+    translated.push(await translateArticleToJapanese(article));
+  }
+
+  return translated;
 }
