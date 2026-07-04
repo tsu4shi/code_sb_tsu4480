@@ -48,6 +48,14 @@ globs:
   (`振替` = 1), and rows excluded from MoneyForward's own calculation
   (`計算対象` = 0). Keep this logic centralized in
   `aggregate.js#isExpenseEligible`.
+- The mark value set is `PERSON_ME` / `PERSON_SPOUSE` / `PERSON_SHARED` /
+  `PERSON_EXCLUDED` (`MARK_KEYS` in `aggregate.js`). `PERSON_EXCLUDED`
+  ("除外") is a manual override for money-movement-only transactions
+  MoneyForward didn't flag as a transfer (e.g. a bank wire) — it must be
+  dropped from every total (`totals`, `byMonth`, `unmarked`), tracked only
+  in `excludedByMark` for transparency, and must never be added to
+  `PERSON_KEYS` (which is specifically the set of columns shown in the
+  money totals table).
 
 ## Testing
 

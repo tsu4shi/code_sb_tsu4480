@@ -12,7 +12,7 @@
         <h1>家計簿 集計ツール</h1>
         <p class="subtitle">
           MoneyForward ME からエクスポートした「収入・支出詳細」CSVを読み込み、明細ごとに負担者（私 / 妻 /
-          共通）をマークして、月別の出費集計を作成します。
+          共通 / 除外）をマークして、月別の出費集計を作成します。「除外」は銀行振り込みなど口座間の資金移動だけで、集計対象にしたくない明細に使います。
         </p>
         <p class="privacy-note">
           ※ このページはブラウザ内だけでCSVを処理します。データはどこにも送信されません。マーク結果はこの端末の
@@ -47,6 +47,7 @@
             <option value="me">私</option>
             <option value="spouse">妻</option>
             <option value="shared">共通</option>
+            <option value="excluded">除外</option>
           </select>
           <label class="checkbox-label"><input type="checkbox" id="bulk-overwrite" /> 既存のマークを上書きする</label>
           <button id="bulk-apply">適用</button>
@@ -59,6 +60,7 @@
             <option value="me">私</option>
             <option value="spouse">妻</option>
             <option value="shared">共通</option>
+            <option value="excluded">除外</option>
           </select>
           <label class="checkbox-label"><input type="checkbox" id="bulk-content-overwrite" /> 既存のマークを上書きする</label>
           <button id="bulk-content-apply">適用</button>
@@ -87,6 +89,7 @@
               <option value="me">私</option>
               <option value="spouse">妻</option>
               <option value="shared">共通</option>
+              <option value="excluded">除外</option>
             </select>
           </label>
           <button id="export-marks">マークをエクスポート</button>

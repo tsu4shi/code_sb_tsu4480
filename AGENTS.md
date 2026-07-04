@@ -40,7 +40,7 @@ A separate **Node CLI** fetches US stock market news via the Finnhub API. It is 
 
 ## Kakeibo (household budget) tool
 
-A separate **browser tool + Node CLI** for combining MoneyForward ME "収入・支出詳細" CSV exports into one ledger, letting the user manually mark each transaction as belonging to themselves/spouse/shared, and aggregating expenses by month and person. It is independent of the Parcel demo and the news tool.
+A separate **browser tool + Node CLI** for combining MoneyForward ME "収入・支出詳細" CSV exports into one ledger, letting the user manually mark each transaction as belonging to themselves/spouse/shared/excluded (excluded = money-movement-only transactions, e.g. a bank transfer, that should be dropped from all totals), and aggregating expenses by month and person. It is independent of the Parcel demo and the news tool.
 
 - Browser entry: `kakeibo.html` → `src/kakeibo/kakeiboApp.js` (run via `npm run kakeibo`, serves on port 1235). All CSV parsing/marking/aggregation happens client-side; nothing is sent to a server.
 - Core modules (framework-agnostic, shared by browser + CLI): `src/kakeibo/csv.js`, `parseMoneyForwardCsv.js`, `combineTransactions.js`, `aggregate.js`, `ledgerCsv.js` (read/write the tool's own "全データCSV" export format, which round-trips both transactions and marks)

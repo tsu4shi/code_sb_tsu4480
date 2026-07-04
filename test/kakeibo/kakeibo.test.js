@@ -10,6 +10,7 @@ import {
   PERSON_ME,
   PERSON_SPOUSE,
   PERSON_SHARED,
+  PERSON_EXCLUDED,
 } from "../../src/kakeibo/aggregate.js";
 import { buildLedgerCsv, parseLedgerCsv, isLedgerCsvHeader } from "../../src/kakeibo/ledgerCsv.js";
 
@@ -142,6 +143,38 @@ test("summarizeByMonthAndPerson aggregates marked expenses per month", () => {
   assert.equal(summary.excludedCount, 1);
 });
 
+test("summarizeByMonthAndPerson drops 除外-marked expenses from all totals", () => {
+  const txs = parseMoneyForwardCsv(
+    sampleCsv([
+      '"1","2026/01/10","私の食費","-1000","太郎_カードA","食費","食料品","","0","id-1"',
+      '"1","2026/01/15","現金引き出し(振替判定されず)","-30000","太郎_銀行A","現金・カード","その他","","0","id-2"',
+      '"1","2026/02/01","私の趣味","-500","太郎_カードA","趣味・娯楽","","","0","id-3"',
+    ])
+  );
+
+  const marks = {
+    "id-1": PERSON_ME,
+    "id-2": PERSON_EXCLUDED,
+    "id-3": PERSON_EXCLUDED,
+  };
+
+  const summary = summarizeByMonthAndPerson(txs, marks);
+
+  // The excluded transaction's amount must not show up anywhere in totals.
+  assert.equal(summary.totals[PERSON_ME], 1000);
+  assert.equal(summary.totals[PERSON_SPOUSE], 0);
+  assert.equal(summary.totals[PERSON_SHARED], 0);
+  assert.equal(summary.unmarked.count, 0);
+
+  assert.equal(summary.excludedByMark.count, 2);
+  assert.equal(summary.excludedByMark.amount, 30500);
+
+  // 2026-02 has only an excluded transaction, but the month must still
+  // appear (with zeros) rather than disappearing from the summary.
+  assert.deepEqual(summary.months, ["2026-01", "2026-02"]);
+  assert.deepEqual(summary.byMonth["2026-02"], { [PERSON_ME]: 0, [PERSON_SPOUSE]: 0, [PERSON_SHARED]: 0 });
+});
+
 test("buildLedgerCsv + parseLedgerCsv round-trips transactions and marks", () => {
   const txs = parseMoneyForwardCsv(
     sampleCsv([
@@ -150,7 +183,7 @@ test("buildLedgerCsv + parseLedgerCsv round-trips transactions and marks", () =>
       '"1","2026/01/25","口座振替","-500","太郎_銀行A","収入","振り替え","","1","id-3"',
     ])
   );
-  const marks = { "id-1": PERSON_ME, "id-2": PERSON_SPOUSE };
+  const marks = { "id-1": PERSON_ME, "id-2": PERSON_SPOUSE, "id-3": PERSON_EXCLUDED };
 
   const csv = buildLedgerCsv(txs, marks);
   assert.ok(isLedgerCsvHeader(parseCsvRows(csv.replace(/^\uFEFF/, ""))[0]));
@@ -166,7 +199,7 @@ test("buildLedgerCsv + parseLedgerCsv round-trips transactions and marks", () =>
   assert.equal(restored[0].month, "2026-01");
   assert.equal(restored[2].isTransfer, true);
 
-  assert.deepEqual(restoredMarks, { "id-1": PERSON_ME, "id-2": PERSON_SPOUSE });
+  assert.deepEqual(restoredMarks, { "id-1": PERSON_ME, "id-2": PERSON_SPOUSE, "id-3": PERSON_EXCLUDED });
 });
 
 test("isLedgerCsvHeader rejects a raw MoneyForward header", () => {

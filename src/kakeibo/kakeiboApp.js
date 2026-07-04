@@ -8,6 +8,9 @@ import {
   PERSON_ME,
   PERSON_SPOUSE,
   PERSON_SHARED,
+  PERSON_EXCLUDED,
+  PERSON_UNSET,
+  MARK_KEYS,
   PERSON_LABELS_JA,
 } from "./aggregate.js";
 
@@ -240,13 +243,18 @@ function renderSummary() {
     (p) => `<td class="num">${yen(summary.totals[p])}</td>`
   ).join("")}<td class="num muted">${yen(summary.unmarked.amount)}</td><td class="num total">${yen(grandTotal)}</td></tr>`;
 
+  const manualExcludedHint = summary.excludedByMark.count
+    ? `手動で「除外」に設定した明細 ${summary.excludedByMark.count}件（${yen(summary.excludedByMark.amount)}）も集計から除外しています。`
+    : "";
+
   container.innerHTML = `
     <table class="summary-table">
       <thead><tr>${headerCells}</tr></thead>
       <tbody>${rows}${totalRow}</tbody>
     </table>
     <p class="hint">
-      振替・計算対象外・収入の明細は集計から除外しています（除外件数: ${summary.excludedCount}件）。「未設定」列はまだマークしていない支出です。
+      振替・計算対象外・収入の明細は集計から自動的に除外しています（除外件数: ${summary.excludedCount}件）。${manualExcludedHint}
+      「未設定」列はまだマークしていない支出です。
     </p>
   `;
 }
@@ -271,8 +279,8 @@ function renderLedger() {
   const rowsData = state.transactions.filter((tx) => {
     if (month && tx.month !== month) return false;
     const mark = state.marks[tx.id] || "";
-    if (person === "unset" && mark) return false;
-    if (person && person !== "unset" && mark !== person) return false;
+    if (person === PERSON_UNSET && mark) return false;
+    if (person && person !== PERSON_UNSET && mark !== person) return false;
     return true;
   });
 
@@ -281,14 +289,15 @@ function renderLedger() {
   const rowsHtml = rowsData
     .map((tx) => {
       const mark = state.marks[tx.id] || "";
-      const eligible = isExpenseEligible(tx);
+      const eligible = isExpenseEligible(tx) && mark !== PERSON_EXCLUDED;
       const badges = [
         tx.isTransfer ? '<span class="badge">振替</span>' : "",
         !tx.isCalcTarget ? '<span class="badge">対象外</span>' : "",
         tx.amount > 0 && !tx.isTransfer ? '<span class="badge income">収入</span>' : "",
+        mark === PERSON_EXCLUDED ? '<span class="badge">除外</span>' : "",
       ].join("");
 
-      const options = ["", PERSON_ME, PERSON_SPOUSE, PERSON_SHARED]
+      const options = ["", ...MARK_KEYS]
         .map((p) => `<option value="${p}" ${mark === p ? "selected" : ""}>${p ? PERSON_LABELS_JA[p] : "未設定"}</option>`)
         .join("");
 
@@ -345,7 +354,7 @@ function exportMarks() {
   );
 }
 
-const VALID_PERSON_KEYS = new Set([PERSON_ME, PERSON_SPOUSE, PERSON_SHARED]);
+const VALID_MARK_KEYS = new Set(MARK_KEYS);
 
 /** Accepts either a JSON marks export or a ledger CSV (from this tool's own CSV export). */
 async function importMarks(file) {
@@ -364,8 +373,8 @@ async function importMarks(file) {
     }
 
     // Guard against malformed/unrelated JSON silently polluting state with
-    // junk keys — only accept known person values.
-    const validEntries = Object.entries(incoming).filter(([, person]) => VALID_PERSON_KEYS.has(person));
+    // junk keys — only accept known mark values.
+    const validEntries = Object.entries(incoming).filter(([, person]) => VALID_MARK_KEYS.has(person));
 
     Object.assign(state.marks, Object.fromEntries(validEntries));
     saveMarks();
