@@ -35,9 +35,13 @@ globs:
 ## Data model
 
 - Core parsing/combining/aggregation logic (`csv.js`,
-  `parseMoneyForwardCsv.js`, `combineTransactions.js`, `aggregate.js`) must
-  stay framework-agnostic plain JS (no `fs`, no DOM) so it can run unchanged
-  in both the Node CLI and the browser bundle.
+  `parseMoneyForwardCsv.js`, `combineTransactions.js`, `aggregate.js`,
+  `ledgerCsv.js`) must stay framework-agnostic plain JS (no `fs`, no DOM) so
+  it can run unchanged in both the Node CLI and the browser bundle.
+- `ledgerCsv.js` is this tool's own round-trippable export format (carries
+  marks alongside transaction data). Keep `buildLedgerCsv`/`parseLedgerCsv`
+  in sync with each other and with `LEDGER_HEADER` — a browser reload must be
+  able to fully restore state from a previously downloaded ledger CSV alone.
 - Transaction identity is the MoneyForward `ID` column; dedupe and mark
   persistence must always key off of it.
 - Expense aggregation must exclude: income rows (amount >= 0), transfers

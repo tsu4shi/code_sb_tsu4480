@@ -11,6 +11,7 @@ import {
   PERSON_SPOUSE,
   PERSON_SHARED,
 } from "../../src/kakeibo/aggregate.js";
+import { buildLedgerCsv, parseLedgerCsv, isLedgerCsvHeader } from "../../src/kakeibo/ledgerCsv.js";
 
 const HEADER =
   '"計算対象","日付","内容","金額（円）","保有金融機関","大項目","中項目","メモ","振替","ID"';
@@ -139,4 +140,36 @@ test("summarizeByMonthAndPerson aggregates marked expenses per month", () => {
 
   // income row (id-6) is excluded from expense aggregation.
   assert.equal(summary.excludedCount, 1);
+});
+
+test("buildLedgerCsv + parseLedgerCsv round-trips transactions and marks", () => {
+  const txs = parseMoneyForwardCsv(
+    sampleCsv([
+      '"1","2026/01/10","私の食費","-1000","太郎_カードA","食費","食料品","","0","id-1"',
+      '"1","2026/01/20","妻の食費","-2000","花子_カードB","食費","食料品","","0","id-2"',
+      '"1","2026/01/25","口座振替","-500","太郎_銀行A","収入","振り替え","","1","id-3"',
+    ])
+  );
+  const marks = { "id-1": PERSON_ME, "id-2": PERSON_SPOUSE };
+
+  const csv = buildLedgerCsv(txs, marks);
+  assert.ok(isLedgerCsvHeader(parseCsvRows(csv.replace(/^\uFEFF/, ""))[0]));
+
+  const { transactions: restored, marks: restoredMarks } = parseLedgerCsv(csv);
+  assert.equal(restored.length, 3);
+  assert.deepEqual(
+    restored.map((t) => t.id),
+    ["id-1", "id-2", "id-3"]
+  );
+  assert.equal(restored[0].amount, -1000);
+  assert.equal(restored[0].date, "2026-01-10");
+  assert.equal(restored[0].month, "2026-01");
+  assert.equal(restored[2].isTransfer, true);
+
+  assert.deepEqual(restoredMarks, { "id-1": PERSON_ME, "id-2": PERSON_SPOUSE });
+});
+
+test("isLedgerCsvHeader rejects a raw MoneyForward header", () => {
+  const [rawHeader] = parseCsvRows(HEADER);
+  assert.equal(isLedgerCsvHeader(rawHeader), false);
 });

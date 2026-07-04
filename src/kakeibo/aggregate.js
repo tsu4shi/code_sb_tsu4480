@@ -13,6 +13,23 @@ export const PERSON_UNSET = "unset";
 
 export const PERSON_KEYS = [PERSON_ME, PERSON_SPOUSE, PERSON_SHARED];
 
+/** Japanese display labels for each person key. */
+export const PERSON_LABELS_JA = {
+  [PERSON_ME]: "私",
+  [PERSON_SPOUSE]: "妻",
+  [PERSON_SHARED]: "共通",
+};
+
+/** Reverse lookup: Japanese label -> person key (accepts English keys too). */
+export const PERSON_LABEL_TO_KEY = {
+  私: PERSON_ME,
+  妻: PERSON_SPOUSE,
+  共通: PERSON_SHARED,
+  [PERSON_ME]: PERSON_ME,
+  [PERSON_SPOUSE]: PERSON_SPOUSE,
+  [PERSON_SHARED]: PERSON_SHARED,
+};
+
 /**
  * A transaction counts toward personal expense totals when:
  * - it's included in MoneyForward's own calculation (計算対象 = 1)

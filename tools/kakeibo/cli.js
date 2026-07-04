@@ -2,10 +2,10 @@ import { readdirSync, readFileSync, writeFileSync } from "fs";
 import { join, basename, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
-import { parseCsvRows } from "../../src/kakeibo/csv.js";
 import { parseMoneyForwardCsv } from "../../src/kakeibo/parseMoneyForwardCsv.js";
 import { combineTransactions } from "../../src/kakeibo/combineTransactions.js";
-import { summarizeByMonthAndPerson, PERSON_ME, PERSON_SPOUSE, PERSON_SHARED } from "../../src/kakeibo/aggregate.js";
+import { summarizeByMonthAndPerson } from "../../src/kakeibo/aggregate.js";
+import { buildLedgerCsv, parseLedgerCsv } from "../../src/kakeibo/ledgerCsv.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -29,9 +29,9 @@ Commands:
   combine     Read all MoneyForward ME "収入・支出詳細_*.csv" exports in a
               directory, merge them into one deduplicated ledger, and write
               a single UTF-8 CSV with an empty "負担者" column for marking.
-  summarize   Read a marked ledger CSV (the output of "combine", with the
-              "負担者" column filled in as me/spouse/shared/未設定) and print
-              a month x person expense summary as JSON.
+  summarize   Read a marked ledger CSV (the output of "combine", or the
+              browser app's "全データCSVをダウンロード", with "負担者" filled
+              in as 私/妻/共通) and print a month x person expense summary as JSON.
 
 Options:
   --input-dir, -i <dir>   Directory containing raw MoneyForward CSV exports
@@ -50,40 +50,6 @@ function decodeShiftJis(buffer) {
   return new TextDecoder("shift_jis").decode(buffer);
 }
 
-function csvEscape(value) {
-  const str = String(value ?? "");
-  return `"${str.replace(/"/g, '""')}"`;
-}
-
-const LEDGER_COLUMNS = [
-  "id",
-  "date",
-  "content",
-  "amount",
-  "institution",
-  "majorCategory",
-  "minorCategory",
-  "memo",
-  "isTransfer",
-  "isCalcTarget",
-  "sourceLabel",
-];
-
-const LEDGER_HEADER_JA = [
-  "ID",
-  "日付",
-  "内容",
-  "金額（円）",
-  "保有金融機関",
-  "大項目",
-  "中項目",
-  "メモ",
-  "振替",
-  "計算対象",
-  "元ファイル",
-  "負担者", // me / spouse / shared / (blank = unset)
-];
-
 function runCombine(options) {
   const inputDir = resolve(options.inputDir || join(__dirname, "../../data/moneyforward"));
   const outPath = options.out ? resolve(options.out) : null;
@@ -100,19 +66,7 @@ function runCombine(options) {
   });
 
   const { transactions, duplicateCount } = combineTransactions(groups);
-
-  const lines = [LEDGER_HEADER_JA.map(csvEscape).join(",")];
-  for (const tx of transactions) {
-    const cells = LEDGER_COLUMNS.map((col) => {
-      if (col === "isTransfer" || col === "isCalcTarget") {
-        return tx[col] ? "1" : "0";
-      }
-      return tx[col];
-    });
-    cells.push(""); // 負担者 left blank for manual marking
-    lines.push(cells.map(csvEscape).join(","));
-  }
-  const csvOut = "\uFEFF" + lines.join("\r\n") + "\r\n";
+  const csvOut = buildLedgerCsv(transactions, {});
 
   if (outPath) {
     writeFileSync(outPath, csvOut, "utf8");
@@ -141,28 +95,7 @@ function runSummarize(options) {
     throw new Error("--marks <file> is required for the summarize command");
   }
   const text = readFileSync(resolve(options.marksFile), "utf8");
-  const rows = parseCsvRows(text.replace(/^\uFEFF/, ""));
-  const [header, ...body] = rows;
-
-  const idx = (name) => header.indexOf(name);
-  const personMap = { 私: PERSON_ME, 妻: PERSON_SPOUSE, 共通: PERSON_SHARED, me: PERSON_ME, spouse: PERSON_SPOUSE, shared: PERSON_SHARED };
-
-  const transactions = body.map((row) => ({
-    id: row[idx("ID")],
-    month: row[idx("日付")].slice(0, 7),
-    amount: Number(row[idx("金額（円）")]),
-    isTransfer: row[idx("振替")] === "1",
-    isCalcTarget: row[idx("計算対象")] === "1",
-  }));
-
-  const marks = {};
-  body.forEach((row) => {
-    const raw = row[idx("負担者")]?.trim();
-    if (raw && personMap[raw]) {
-      marks[row[idx("ID")]] = personMap[raw];
-    }
-  });
-
+  const { transactions, marks } = parseLedgerCsv(text);
   const summary = summarizeByMonthAndPerson(transactions, marks);
   console.log(JSON.stringify(summary, null, 2));
 }

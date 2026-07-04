@@ -1,20 +1,17 @@
 import { parseMoneyForwardCsv } from "./parseMoneyForwardCsv.js";
+import { parseCsvRows } from "./csv.js";
 import { combineTransactions } from "./combineTransactions.js";
+import { isLedgerCsvHeader, buildLedgerCsv, parseLedgerCsv } from "./ledgerCsv.js";
 import {
   summarizeByMonthAndPerson,
   isExpenseEligible,
   PERSON_ME,
   PERSON_SPOUSE,
   PERSON_SHARED,
+  PERSON_LABELS_JA,
 } from "./aggregate.js";
 
 const MARKS_STORAGE_KEY = "kakeibo:marks:v1";
-
-const PERSON_LABELS = {
-  [PERSON_ME]: "私",
-  [PERSON_SPOUSE]: "妻",
-  [PERSON_SHARED]: "共通",
-};
 const PERSON_ORDER = [PERSON_ME, PERSON_SPOUSE, PERSON_SHARED];
 
 const yen = (n) => `¥${Math.round(n).toLocaleString("ja-JP")}`;
@@ -52,10 +49,37 @@ function setMark(id, person) {
 
 // ---------- CSV loading ----------
 
-async function readFileAsTransactions(file) {
+/**
+ * Detect whether a decoded CSV is a raw MoneyForward ME export or this
+ * tool's own previously-exported ledger (which also carries marks), and
+ * parse it accordingly.
+ */
+function parseAnyCsv(text, sourceLabel) {
+  const [header] = parseCsvRows(text);
+  if (isLedgerCsvHeader(header)) {
+    const { transactions, marks } = parseLedgerCsv(text, sourceLabel);
+    return { transactions, marks };
+  }
+  return { transactions: parseMoneyForwardCsv(text, sourceLabel), marks: {} };
+}
+
+/**
+ * Raw MoneyForward exports are Shift_JIS; this tool's own ledger CSV export
+ * is UTF-8. Try UTF-8 first (strict) and fall back to Shift_JIS, so either
+ * file type can be dropped into the same file picker.
+ */
+function decodeCsvBuffer(buffer) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+  } catch {
+    return new TextDecoder("shift_jis").decode(buffer);
+  }
+}
+
+async function readFile(file) {
   const buffer = await file.arrayBuffer();
-  const text = new TextDecoder("shift_jis").decode(buffer);
-  return parseMoneyForwardCsv(text, file.name);
+  const text = decodeCsvBuffer(buffer);
+  return parseAnyCsv(text, file.name);
 }
 
 async function handleFiles(fileList) {
@@ -65,20 +89,32 @@ async function handleFiles(fileList) {
 
   try {
     const files = Array.from(fileList);
-    const groups = await Promise.all(files.map(readFileAsTransactions));
-    const { transactions, duplicateCount } = combineTransactions(groups);
+    const parsed = await Promise.all(files.map(readFile));
+    const { transactions, duplicateCount } = combineTransactions(parsed.map((p) => p.transactions));
     state.transactions = transactions;
+
+    // Marks embedded in a previously exported ledger CSV (if any) restore
+    // the person assignment without needing a separate JSON import.
+    let restoredMarkCount = 0;
+    for (const { marks } of parsed) {
+      for (const [id, person] of Object.entries(marks)) {
+        state.marks[id] = person;
+        restoredMarkCount++;
+      }
+    }
+    if (restoredMarkCount > 0) saveMarks();
 
     const months = [...new Set(transactions.map((t) => t.month))].sort();
     statusEl.textContent = `${files.length}ファイルから${transactions.length}件の明細を読み込みました（対象月: ${months.join(", ")}${
       duplicateCount ? ` / 重複${duplicateCount}件をスキップ` : ""
-    }）`;
+    }${restoredMarkCount ? ` / 以前のマーク${restoredMarkCount}件を復元` : ""}）`;
 
     document.getElementById("bulk-section").classList.remove("hidden");
     document.getElementById("summary-section").classList.remove("hidden");
     document.getElementById("ledger-section").classList.remove("hidden");
 
     populateInstitutionOptions();
+    populateContentOptions();
     populateMonthFilter(months);
     renderSummary();
     renderLedger();
@@ -90,33 +126,54 @@ async function handleFiles(fileList) {
   }
 }
 
-// ---------- bulk mark by institution ----------
+// ---------- bulk mark helpers ----------
+
+function countBy(transactions, key) {
+  const counts = new Map();
+  for (const tx of transactions) {
+    counts.set(tx[key], (counts.get(tx[key]) || 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ja"));
+}
 
 function populateInstitutionOptions() {
   const select = document.getElementById("bulk-institution");
-  const institutions = [...new Set(state.transactions.map((t) => t.institution))].sort();
-  select.innerHTML = institutions.map((i) => `<option value="${escapeHtml(i)}">${escapeHtml(i)}</option>`).join("");
+  const entries = countBy(state.transactions, "institution");
+  select.innerHTML = entries
+    .map(([value, count]) => `<option value="${escapeHtml(value)}">${escapeHtml(value)} (${count}件)</option>`)
+    .join("");
 }
 
-function applyBulkMark() {
-  const institution = document.getElementById("bulk-institution").value;
-  const person = document.getElementById("bulk-person").value;
-  if (!institution || !person) return;
+function populateContentOptions() {
+  const select = document.getElementById("bulk-content");
+  const entries = countBy(state.transactions, "content");
+  select.innerHTML = entries
+    .map(([value, count]) => `<option value="${escapeHtml(value)}">${escapeHtml(value)} (${count}件)</option>`)
+    .join("");
+}
 
+/**
+ * Apply `person` to every transaction whose `field` equals `value`.
+ * Existing marks are left untouched unless `overwrite` is true.
+ */
+function applyBulkMark(field, value, person, overwrite) {
   let applied = 0;
   for (const tx of state.transactions) {
-    if (tx.institution === institution && !state.marks[tx.id]) {
-      state.marks[tx.id] = person;
-      applied++;
-    }
+    if (tx[field] !== value) continue;
+    if (!overwrite && state.marks[tx.id]) continue;
+    state.marks[tx.id] = person;
+    applied++;
   }
   saveMarks();
   renderSummary();
   renderLedger();
+  return applied;
+}
 
+function reportBulkResult(label, value, person, applied) {
   const statusEl = document.getElementById("load-status");
   statusEl.classList.remove("error");
-  statusEl.textContent = `「${institution}」の未設定明細 ${applied} 件を「${PERSON_LABELS[person]}」に設定しました。`;
+  statusEl.textContent = `${label}「${value}」の明細 ${applied} 件を「${PERSON_LABELS_JA[person]}」に設定しました。`;
 }
 
 // ---------- summary table ----------
@@ -130,7 +187,7 @@ function renderSummary() {
     return;
   }
 
-  const headerCells = ["月", ...PERSON_ORDER.map((p) => PERSON_LABELS[p]), "未設定", "合計"]
+  const headerCells = ["月", ...PERSON_ORDER.map((p) => PERSON_LABELS_JA[p]), "未設定", "合計"]
     .map((h) => `<th>${h}</th>`)
     .join("");
 
@@ -198,7 +255,7 @@ function renderLedger() {
       ].join("");
 
       const options = ["", PERSON_ME, PERSON_SPOUSE, PERSON_SHARED]
-        .map((p) => `<option value="${p}" ${mark === p ? "selected" : ""}>${p ? PERSON_LABELS[p] : "未設定"}</option>`)
+        .map((p) => `<option value="${p}" ${mark === p ? "selected" : ""}>${p ? PERSON_LABELS_JA[p] : "未設定"}</option>`)
         .join("");
 
       return `
@@ -254,60 +311,31 @@ function exportMarks() {
   );
 }
 
+/** Accepts either a JSON marks export or a ledger CSV (from this tool's own CSV export). */
 async function importMarks(file) {
   const text = await file.text();
-  const data = JSON.parse(text);
-  const incoming = data.marks || data;
+  let incoming;
+
+  const [header] = parseCsvRows(text.replace(/^\uFEFF/, ""));
+  if (isLedgerCsvHeader(header)) {
+    ({ marks: incoming } = parseLedgerCsv(text));
+  } else {
+    const data = JSON.parse(text);
+    incoming = data.marks || data;
+  }
+
   Object.assign(state.marks, incoming);
   saveMarks();
   renderSummary();
   renderLedger();
-}
 
-const LEDGER_HEADER = [
-  "ID",
-  "日付",
-  "内容",
-  "金額（円）",
-  "保有金融機関",
-  "大項目",
-  "中項目",
-  "メモ",
-  "振替",
-  "計算対象",
-  "元ファイル",
-  "負担者",
-];
-
-function csvEscape(value) {
-  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+  const statusEl = document.getElementById("load-status");
+  statusEl.classList.remove("error");
+  statusEl.textContent = `マークを ${Object.keys(incoming).length} 件インポートしました。`;
 }
 
 function exportLedgerCsv() {
-  const lines = [LEDGER_HEADER.map(csvEscape).join(",")];
-  for (const tx of state.transactions) {
-    const mark = state.marks[tx.id];
-    const markLabel = mark ? PERSON_LABELS[mark] : "";
-    lines.push(
-      [
-        tx.id,
-        tx.date,
-        tx.content,
-        tx.amount,
-        tx.institution,
-        tx.majorCategory,
-        tx.minorCategory,
-        tx.memo,
-        tx.isTransfer ? "1" : "0",
-        tx.isCalcTarget ? "1" : "0",
-        tx.sourceLabel,
-        markLabel,
-      ]
-        .map(csvEscape)
-        .join(",")
-    );
-  }
-  downloadFile("kakeibo-ledger.csv", "\uFEFF" + lines.join("\r\n") + "\r\n", "text/csv");
+  downloadFile("kakeibo-ledger.csv", buildLedgerCsv(state.transactions, state.marks), "text/csv");
 }
 
 // ---------- wiring ----------
@@ -316,7 +344,23 @@ function init() {
   state.marks = loadMarks();
 
   document.getElementById("file-input").addEventListener("change", (e) => handleFiles(e.target.files));
-  document.getElementById("bulk-apply").addEventListener("click", applyBulkMark);
+
+  document.getElementById("bulk-apply").addEventListener("click", () => {
+    const value = document.getElementById("bulk-institution").value;
+    const person = document.getElementById("bulk-person").value;
+    if (!value || !person) return;
+    const applied = applyBulkMark("institution", value, person, false);
+    reportBulkResult("保有金融機関", value, person, applied);
+  });
+
+  document.getElementById("bulk-content-apply").addEventListener("click", () => {
+    const value = document.getElementById("bulk-content").value;
+    const person = document.getElementById("bulk-content-person").value;
+    if (!value || !person) return;
+    const applied = applyBulkMark("content", value, person, false);
+    reportBulkResult("内容", value, person, applied);
+  });
+
   document.getElementById("month-filter").addEventListener("change", (e) => {
     state.filters.month = e.target.value;
     renderLedger();
