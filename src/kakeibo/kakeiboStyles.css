@@ -92,6 +92,14 @@ input[type="file"] {
   font-size: 0.9em;
 }
 
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
 .ledger-toolbar {
   display: flex;
   gap: 16px;

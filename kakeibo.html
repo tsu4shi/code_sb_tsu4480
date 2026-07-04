@@ -33,7 +33,7 @@
       <section id="bulk-section" class="panel hidden">
         <h2>2. まとめて一括マーク（任意）</h2>
         <p>
-          「保有金融機関」や「内容」でまとめて設定すると、個別に選ぶ手間を減らせます。既にマーク済みの明細は上書きされません。
+          「保有金融機関」や「内容」でまとめて設定すると、個別に選ぶ手間を減らせます。「上書きする」にチェックを入れない限り、既にマーク済みの明細は変更されません。
         </p>
         <div class="bulk-controls">
           <label>保有金融機関:</label>
@@ -44,7 +44,8 @@
             <option value="spouse">妻</option>
             <option value="shared">共通</option>
           </select>
-          <button id="bulk-apply">未設定の明細に適用</button>
+          <label class="checkbox-label"><input type="checkbox" id="bulk-overwrite" /> 既存のマークを上書きする</label>
+          <button id="bulk-apply">適用</button>
         </div>
         <div class="bulk-controls">
           <label>内容:</label>
@@ -55,7 +56,8 @@
             <option value="spouse">妻</option>
             <option value="shared">共通</option>
           </select>
-          <button id="bulk-content-apply">未設定の明細に適用</button>
+          <label class="checkbox-label"><input type="checkbox" id="bulk-content-overwrite" /> 既存のマークを上書きする</label>
+          <button id="bulk-content-apply">適用</button>
         </div>
       </section>
 

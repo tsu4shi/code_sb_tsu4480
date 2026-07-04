@@ -170,10 +170,11 @@ function applyBulkMark(field, value, person, overwrite) {
   return applied;
 }
 
-function reportBulkResult(label, value, person, applied) {
+function reportBulkResult(label, value, person, applied, overwrite) {
   const statusEl = document.getElementById("load-status");
   statusEl.classList.remove("error");
-  statusEl.textContent = `${label}「${value}」の明細 ${applied} 件を「${PERSON_LABELS_JA[person]}」に設定しました。`;
+  const scope = overwrite ? "" : "（未設定のみ）";
+  statusEl.textContent = `${label}「${value}」の明細 ${applied} 件を「${PERSON_LABELS_JA[person]}」に設定しました${scope}。`;
 }
 
 // ---------- summary table ----------
@@ -348,17 +349,19 @@ function init() {
   document.getElementById("bulk-apply").addEventListener("click", () => {
     const value = document.getElementById("bulk-institution").value;
     const person = document.getElementById("bulk-person").value;
+    const overwrite = document.getElementById("bulk-overwrite").checked;
     if (!value || !person) return;
-    const applied = applyBulkMark("institution", value, person, false);
-    reportBulkResult("保有金融機関", value, person, applied);
+    const applied = applyBulkMark("institution", value, person, overwrite);
+    reportBulkResult("保有金融機関", value, person, applied, overwrite);
   });
 
   document.getElementById("bulk-content-apply").addEventListener("click", () => {
     const value = document.getElementById("bulk-content").value;
     const person = document.getElementById("bulk-content-person").value;
+    const overwrite = document.getElementById("bulk-content-overwrite").checked;
     if (!value || !person) return;
-    const applied = applyBulkMark("content", value, person, false);
-    reportBulkResult("内容", value, person, applied);
+    const applied = applyBulkMark("content", value, person, overwrite);
+    reportBulkResult("内容", value, person, applied, overwrite);
   });
 
   document.getElementById("month-filter").addEventListener("change", (e) => {
