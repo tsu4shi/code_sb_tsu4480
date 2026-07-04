@@ -45,6 +45,11 @@ function setMark(id, person) {
   }
   saveMarks();
   renderSummary();
+  // Re-sync the ledger table with the "負担者で絞り込み" filter (e.g. a row
+  // marked while filtered to "未設定" should drop out of that view).
+  if (state.filters.person) {
+    renderLedger();
+  }
 }
 
 // ---------- CSV loading ----------
@@ -55,7 +60,7 @@ function setMark(id, person) {
  * parse it accordingly.
  */
 function parseAnyCsv(text, sourceLabel) {
-  const [header] = parseCsvRows(text);
+  const [header] = parseCsvRows(text.replace(/^\uFEFF/, ""));
   if (isLedgerCsvHeader(header)) {
     const { transactions, marks } = parseLedgerCsv(text, sourceLabel);
     return { transactions, marks };
@@ -79,19 +84,45 @@ function decodeCsvBuffer(buffer) {
 async function readFile(file) {
   const buffer = await file.arrayBuffer();
   const text = decodeCsvBuffer(buffer);
-  return parseAnyCsv(text, file.name);
+  try {
+    return parseAnyCsv(text, file.name);
+  } catch (err) {
+    throw new Error(`${file.name}: ${err.message}`);
+  }
+}
+
+const CSV_EXTENSION = /\.csv$/i;
+
+/** Filter a FileList/array down to .csv files, ignoring anything else. */
+function filterCsvFiles(fileList) {
+  return Array.from(fileList).filter((f) => CSV_EXTENSION.test(f.name));
 }
 
 async function handleFiles(fileList) {
   const statusEl = document.getElementById("load-status");
-  statusEl.textContent = "読み込み中...";
   statusEl.classList.remove("error");
 
+  const files = filterCsvFiles(fileList);
+  const skipped = fileList.length - files.length;
+
+  if (files.length === 0) {
+    statusEl.textContent = "CSVファイルが見つかりませんでした（.csv拡張子のファイルを選択してください）。";
+    statusEl.classList.add("error");
+    return;
+  }
+
+  statusEl.textContent = "読み込み中...";
+
   try {
-    const files = Array.from(fileList);
     const parsed = await Promise.all(files.map(readFile));
     const { transactions, duplicateCount } = combineTransactions(parsed.map((p) => p.transactions));
     state.transactions = transactions;
+
+    // A fresh set of files is a new dataset; stale filters from a previous
+    // load (e.g. a month that no longer exists) would otherwise silently
+    // hide rows without the dropdowns reflecting it.
+    state.filters = { month: "", person: "" };
+    document.getElementById("person-filter").value = "";
 
     // Marks embedded in a previously exported ledger CSV (if any) restore
     // the person assignment without needing a separate JSON import.
@@ -107,7 +138,9 @@ async function handleFiles(fileList) {
     const months = [...new Set(transactions.map((t) => t.month))].sort();
     statusEl.textContent = `${files.length}ファイルから${transactions.length}件の明細を読み込みました（対象月: ${months.join(", ")}${
       duplicateCount ? ` / 重複${duplicateCount}件をスキップ` : ""
-    }${restoredMarkCount ? ` / 以前のマーク${restoredMarkCount}件を復元` : ""}）`;
+    }${restoredMarkCount ? ` / 以前のマーク${restoredMarkCount}件を復元` : ""}${
+      skipped ? ` / CSV以外の${skipped}件を無視` : ""
+    }）`;
 
     document.getElementById("bulk-section").classList.remove("hidden");
     document.getElementById("summary-section").classList.remove("hidden");
@@ -312,27 +345,41 @@ function exportMarks() {
   );
 }
 
+const VALID_PERSON_KEYS = new Set([PERSON_ME, PERSON_SPOUSE, PERSON_SHARED]);
+
 /** Accepts either a JSON marks export or a ledger CSV (from this tool's own CSV export). */
 async function importMarks(file) {
-  const text = await file.text();
-  let incoming;
-
-  const [header] = parseCsvRows(text.replace(/^\uFEFF/, ""));
-  if (isLedgerCsvHeader(header)) {
-    ({ marks: incoming } = parseLedgerCsv(text));
-  } else {
-    const data = JSON.parse(text);
-    incoming = data.marks || data;
-  }
-
-  Object.assign(state.marks, incoming);
-  saveMarks();
-  renderSummary();
-  renderLedger();
-
   const statusEl = document.getElementById("load-status");
-  statusEl.classList.remove("error");
-  statusEl.textContent = `マークを ${Object.keys(incoming).length} 件インポートしました。`;
+
+  try {
+    const text = await file.text();
+    let incoming;
+
+    const [header] = parseCsvRows(text.replace(/^\uFEFF/, ""));
+    if (isLedgerCsvHeader(header)) {
+      ({ marks: incoming } = parseLedgerCsv(text));
+    } else {
+      const data = JSON.parse(text);
+      incoming = data.marks || data;
+    }
+
+    // Guard against malformed/unrelated JSON silently polluting state with
+    // junk keys — only accept known person values.
+    const validEntries = Object.entries(incoming).filter(([, person]) => VALID_PERSON_KEYS.has(person));
+
+    Object.assign(state.marks, Object.fromEntries(validEntries));
+    saveMarks();
+    renderSummary();
+    renderLedger();
+
+    statusEl.classList.remove("error");
+    statusEl.textContent = `マークを ${validEntries.length} 件インポートしました。`;
+  } catch (err) {
+    statusEl.textContent = `マークのインポートに失敗しました: ${err.message}`;
+    statusEl.classList.add("error");
+    // eslint-disable-next-line no-console
+    console.error(err);
+  }
 }
 
 function exportLedgerCsv() {
@@ -341,10 +388,51 @@ function exportLedgerCsv() {
 
 // ---------- wiring ----------
 
+function initDropzone() {
+  const dropzone = document.getElementById("dropzone");
+  // The dropzone is a <label for="file-input">, so clicking it already
+  // opens the native file picker natively — no JS forwarding needed here.
+
+  ["dragenter", "dragover"].forEach((eventName) => {
+    dropzone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.add("dragover");
+    });
+  });
+
+  ["dragleave", "dragend"].forEach((eventName) => {
+    dropzone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.remove("dragover");
+    });
+  });
+
+  dropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropzone.classList.remove("dragover");
+    if (e.dataTransfer.files.length > 0) {
+      handleFiles(e.dataTransfer.files);
+    }
+  });
+
+  // Prevent the browser from navigating to/opening the file if a drop
+  // lands outside the dropzone (the default behavior for the whole page).
+  ["dragover", "drop"].forEach((eventName) => {
+    window.addEventListener(eventName, (e) => e.preventDefault());
+  });
+}
+
 function init() {
   state.marks = loadMarks();
 
-  document.getElementById("file-input").addEventListener("change", (e) => handleFiles(e.target.files));
+  initDropzone();
+  document.getElementById("file-input").addEventListener("change", (e) => {
+    if (e.target.files.length > 0) handleFiles(e.target.files);
+    e.target.value = "";
+  });
 
   document.getElementById("bulk-apply").addEventListener("click", () => {
     const value = document.getElementById("bulk-institution").value;

@@ -26,7 +26,11 @@
           MoneyForward ME の「収入・支出詳細」でエクスポートしたCSVファイルを、月をまたいで複数選択してください（Shift_JIS
           / CP932 形式のまま読み込めます）。以前この画面で保存した「全データCSV」を選択すると、明細とマークの両方が復元されます（新しい月のCSVと一緒に選んでもOKです）。
         </p>
-        <input type="file" id="file-input" accept=".csv" multiple />
+        <label id="dropzone" class="dropzone" for="file-input">
+          <p>ここに複数のCSVファイルをドラッグ＆ドロップ</p>
+          <p class="hint">またはクリックしてファイルを選択</p>
+          <input type="file" id="file-input" accept=".csv" multiple />
+        </label>
         <div id="load-status" class="status"></div>
       </section>
 

@@ -41,6 +41,39 @@ header h1 {
   display: none;
 }
 
+.dropzone {
+  display: block;
+  border: 2px dashed #aab4c0;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  background: #fafbfc;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.dropzone p {
+  margin: 4px 0;
+  /* Keep drag/click events targeted at the dropzone itself, not its text
+     children, to avoid dragenter/dragleave flicker as the cursor crosses
+     child element boundaries while dragging files over the label. */
+  pointer-events: none;
+}
+
+.dropzone .hint {
+  font-size: 0.85em;
+  color: #888;
+}
+
+.dropzone.dragover {
+  border-color: #2266cc;
+  background: #eef4ff;
+}
+
+.dropzone input[type="file"] {
+  margin-top: 10px;
+}
+
 .status {
   margin-top: 10px;
   font-weight: 600;
