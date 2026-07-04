@@ -2,3 +2,7 @@ node_modules/
 dist/
 .cache/
 .env
+
+# Personal financial data (MoneyForward ME exports, combined ledgers, marks)
+# must never be committed. See docs/kakeibo.md.
+data/

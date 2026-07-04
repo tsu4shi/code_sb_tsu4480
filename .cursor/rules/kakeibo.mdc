@@ -1,0 +1,58 @@
+---
+description: Rules for developing the household budget (kakeibo) analysis tool
+globs:
+  - src/kakeibo/**
+  - tools/kakeibo/**
+  - test/kakeibo/**
+  - docs/kakeibo.md
+  - kakeibo.html
+---
+
+# Kakeibo (Household Budget) Tool — Development Rules
+
+## Scope
+
+- Build and maintain **MoneyForward ME CSV ingestion, combining, marking, and
+  month x person expense aggregation** only.
+- Do not add budgeting advice, spending predictions, or investment logic.
+- Keep this tool independent from the Parcel demo (`src/index3.js`) and the
+  US market news tool (`src/news/**`).
+
+## Privacy (critical)
+
+- This is personal financial data. **Never commit real MoneyForward export
+  CSVs, combined ledgers, or exported mark files to the repository.**
+- `data/` is gitignored for exactly this reason — keep it that way.
+- The browser app (`kakeiboApp.js`) must never send parsed data anywhere; all
+  parsing/aggregation stays client-side (`fetch`/`XMLHttpRequest` calls are
+  not allowed in this module).
+- Tests and fixtures must use fabricated/anonymized data only, never real
+  names, real account names, or real amounts from an actual export.
+- Do not log full transaction contents (merchant names, memos) to the
+  console in production code paths; status/error logs should stay limited to
+  counts and non-sensitive metadata.
+
+## Data model
+
+- Core parsing/combining/aggregation logic (`csv.js`,
+  `parseMoneyForwardCsv.js`, `combineTransactions.js`, `aggregate.js`) must
+  stay framework-agnostic plain JS (no `fs`, no DOM) so it can run unchanged
+  in both the Node CLI and the browser bundle.
+- Transaction identity is the MoneyForward `ID` column; dedupe and mark
+  persistence must always key off of it.
+- Expense aggregation must exclude: income rows (amount >= 0), transfers
+  (`振替` = 1), and rows excluded from MoneyForward's own calculation
+  (`計算対象` = 0). Keep this logic centralized in
+  `aggregate.js#isExpenseEligible`.
+
+## Testing
+
+- Add/keep unit tests in `test/kakeibo/` for any change to parsing, combining
+  or aggregation logic. Use `node --test`.
+- Never add real personal CSVs as test fixtures; construct minimal inline
+  CSV strings with made-up data instead.
+
+## UI
+
+- Keep the browser UI dependency-free (no frameworks) and served via Parcel
+  as a separate entry point (`kakeibo.html`), not merged into `index.html`.

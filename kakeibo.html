@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>家計簿 集計ツール（MoneyForward ME）</title>
+    <link rel="stylesheet" href="src/kakeibo/kakeiboStyles.css" />
+  </head>
+
+  <body>
+    <div id="app">
+      <header>
+        <h1>家計簿 集計ツール</h1>
+        <p class="subtitle">
+          MoneyForward ME からエクスポートした「収入・支出詳細」CSVを読み込み、明細ごとに負担者（私 / 妻 /
+          共通）をマークして、月別の出費集計を作成します。
+        </p>
+        <p class="privacy-note">
+          ※ このページはブラウザ内だけでCSVを処理します。データはどこにも送信されません。マーク結果はこの端末の
+          localStorage に保存されます。
+        </p>
+      </header>
+
+      <section id="load-section" class="panel">
+        <h2>1. CSVを読み込む</h2>
+        <p>
+          MoneyForward ME の「収入・支出詳細」でエクスポートしたCSVファイルを、月をまたいで複数選択してください（Shift_JIS
+          / CP932 形式のまま読み込めます）。
+        </p>
+        <input type="file" id="file-input" accept=".csv" multiple />
+        <div id="load-status" class="status"></div>
+      </section>
+
+      <section id="bulk-section" class="panel hidden">
+        <h2>2. 口座ごとに一括マーク（任意）</h2>
+        <p>
+          「保有金融機関」でまとめて設定すると、個別に選ぶ手間を減らせます。既にマーク済みの明細は上書きされません。
+        </p>
+        <div class="bulk-controls">
+          <select id="bulk-institution"></select>
+          <select id="bulk-person">
+            <option value="">-- 負担者を選択 --</option>
+            <option value="me">私</option>
+            <option value="spouse">妻</option>
+            <option value="shared">共通</option>
+          </select>
+          <button id="bulk-apply">未設定の明細に適用</button>
+        </div>
+      </section>
+
+      <section id="summary-section" class="panel hidden">
+        <h2>3. 月別集計</h2>
+        <div id="summary-table-container"></div>
+      </section>
+
+      <section id="ledger-section" class="panel hidden">
+        <h2>明細一覧（<span id="ledger-count">0</span> 件）</h2>
+        <div class="ledger-toolbar">
+          <label
+            >月で絞り込み:
+            <select id="month-filter">
+              <option value="">すべて</option>
+            </select>
+          </label>
+          <label
+            >負担者で絞り込み:
+            <select id="person-filter">
+              <option value="">すべて</option>
+              <option value="unset">未設定</option>
+              <option value="me">私</option>
+              <option value="spouse">妻</option>
+              <option value="shared">共通</option>
+            </select>
+          </label>
+          <button id="export-marks">マークをエクスポート</button>
+          <label class="file-label"
+            >マークをインポート
+            <input type="file" id="import-marks" accept=".json" />
+          </label>
+          <button id="export-ledger-csv">全データCSVをダウンロード</button>
+          <button id="clear-marks" class="danger">マークを全消去</button>
+        </div>
+        <div id="ledger-table-container"></div>
+      </section>
+    </div>
+    <script src="src/kakeibo/kakeiboApp.js"></script>
+  </body>
+</html>

@@ -1,0 +1,179 @@
+body {
+  font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  background: #f5f6f8;
+  color: #222;
+  margin: 0;
+  padding: 24px;
+}
+
+#app {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+header h1 {
+  margin-bottom: 4px;
+}
+
+.subtitle {
+  color: #555;
+}
+
+.privacy-note {
+  font-size: 0.85em;
+  color: #777;
+  background: #eef4ff;
+  border: 1px solid #cfe0ff;
+  border-radius: 6px;
+  padding: 8px 12px;
+  display: inline-block;
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.panel.hidden {
+  display: none;
+}
+
+.status {
+  margin-top: 10px;
+  font-weight: 600;
+}
+
+.status.error {
+  color: #c0392b;
+}
+
+.bulk-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid #888;
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.9em;
+}
+
+button:hover {
+  background: #f0f0f0;
+}
+
+button.danger {
+  border-color: #c0392b;
+  color: #c0392b;
+}
+
+button.danger:hover {
+  background: #fdecea;
+}
+
+select,
+input[type="file"] {
+  font-size: 0.9em;
+  padding: 4px 6px;
+}
+
+.file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9em;
+}
+
+.ledger-toolbar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9em;
+}
+
+th,
+td {
+  border: 1px solid #e0e0e0;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+th {
+  background: #f0f2f5;
+  position: sticky;
+  top: 0;
+}
+
+td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+td.neg {
+  color: #c0392b;
+}
+
+td.pos {
+  color: #2266cc;
+}
+
+td.muted {
+  color: #999;
+}
+
+td.total,
+tr.grand-total td {
+  font-weight: 700;
+}
+
+tr.grand-total {
+  background: #f7f9fc;
+}
+
+tr.excluded-row {
+  background: #fafafa;
+  color: #999;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.75em;
+  background: #eee;
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-right: 3px;
+}
+
+.badge.income {
+  background: #e3f2ff;
+  color: #2266cc;
+}
+
+.hint {
+  font-size: 0.85em;
+  color: #777;
+}
+
+#ledger-table-container {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.summary-table {
+  max-width: 700px;
+}
