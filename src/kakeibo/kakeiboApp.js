@@ -350,16 +350,19 @@ function renderLedger() {
         .map((p) => `<option value="${p}" ${mark === p ? "selected" : ""}>${p ? PERSON_LABELS_JA[p] : "未設定"}</option>`)
         .join("");
 
+      // data-label mirrors the column header text; the mobile stylesheet
+      // uses it (via CSS attr()) to turn each cell into a "label: value"
+      // row when the table collapses into a card layout on narrow screens.
       return `
         <tr data-id="${escapeHtml(tx.id)}" class="${eligible ? "" : "excluded-row"}">
-          <td>${tx.date}</td>
-          <td>${escapeHtml(tx.content)}</td>
-          <td class="num ${tx.amount < 0 ? "neg" : "pos"}">${yen(tx.amount)}</td>
-          <td>${escapeHtml(tx.institution)}</td>
-          <td>${escapeHtml(tx.majorCategory)} / ${escapeHtml(tx.minorCategory)}</td>
-          <td><input type="text" class="memo-input" value="${escapeHtml(tx.memo || "")}" placeholder="メモ" /></td>
-          <td>${badges}</td>
-          <td><select class="mark-select">${options}</select></td>
+          <td data-label="日付">${tx.date}</td>
+          <td data-label="内容">${escapeHtml(tx.content)}</td>
+          <td class="num ${tx.amount < 0 ? "neg" : "pos"}" data-label="金額">${yen(tx.amount)}</td>
+          <td data-label="保有金融機関">${escapeHtml(tx.institution)}</td>
+          <td data-label="カテゴリ">${escapeHtml(tx.majorCategory)} / ${escapeHtml(tx.minorCategory)}</td>
+          <td data-label="メモ"><input type="text" class="memo-input" value="${escapeHtml(tx.memo || "")}" placeholder="メモ" /></td>
+          <td data-label="タグ"><span class="cell-value">${badges || "—"}</span></td>
+          <td data-label="負担者"><select class="mark-select">${options}</select></td>
         </tr>
       `;
     })
