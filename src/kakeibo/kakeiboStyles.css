@@ -144,6 +144,15 @@ input[type="text"] {
   max-width: 100%;
 }
 
+select {
+  /* Long option labels (e.g. "三井アウトレットパーク入間 (72件)") get
+     abruptly clipped mid-character by the browser on narrow screens
+     without this — show "…" instead so it's clear text is truncated. */
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 .file-label {
   display: inline-flex;
   align-items: center;
