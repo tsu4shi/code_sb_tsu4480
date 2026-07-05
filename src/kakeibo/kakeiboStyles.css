@@ -191,6 +191,28 @@ tr.excluded-row {
   color: #999;
 }
 
+.memo-input {
+  width: 100%;
+  min-width: 100px;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 3px 4px;
+  font-size: 0.95em;
+  font-family: inherit;
+  color: inherit;
+}
+
+.memo-input:hover {
+  border-color: #d5d5d5;
+}
+
+.memo-input:focus {
+  border-color: #2266cc;
+  background: #fff;
+  outline: none;
+}
+
 .badge {
   display: inline-block;
   font-size: 0.75em;
