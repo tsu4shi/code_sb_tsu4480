@@ -2,6 +2,7 @@ import { parseMoneyForwardCsv } from "./parseMoneyForwardCsv.js";
 import { parseCsvRows } from "./csv.js";
 import { combineTransactions } from "./combineTransactions.js";
 import { isLedgerCsvHeader, buildLedgerCsv, parseLedgerCsv } from "./ledgerCsv.js";
+import { applyMemoOverrides } from "./memoOverrides.js";
 import {
   summarizeByMonthAndPerson,
   isExpenseEligible,
@@ -15,29 +16,44 @@ import {
 } from "./aggregate.js";
 
 const MARKS_STORAGE_KEY = "kakeibo:marks:v1";
+const MEMO_OVERRIDES_STORAGE_KEY = "kakeibo:memoOverrides:v1";
 const PERSON_ORDER = [PERSON_ME, PERSON_SPOUSE, PERSON_SHARED];
 
 const yen = (n) => `¥${Math.round(n).toLocaleString("ja-JP")}`;
 
 const state = {
   transactions: /** @type {object[]} */ ([]),
+  transactionsById: /** @type {Map<string, object>} */ (new Map()),
   marks: /** @type {Record<string, string>} */ ({}),
+  memoOverrides: /** @type {Record<string, string>} */ ({}),
   filters: { month: "", person: "" },
 };
 
 // ---------- persistence ----------
 
-function loadMarks() {
+function loadJson(key) {
   try {
-    const raw = localStorage.getItem(MARKS_STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
   }
 }
 
+function loadMarks() {
+  return loadJson(MARKS_STORAGE_KEY);
+}
+
 function saveMarks() {
   localStorage.setItem(MARKS_STORAGE_KEY, JSON.stringify(state.marks));
+}
+
+function loadMemoOverrides() {
+  return loadJson(MEMO_OVERRIDES_STORAGE_KEY);
+}
+
+function saveMemoOverrides() {
+  localStorage.setItem(MEMO_OVERRIDES_STORAGE_KEY, JSON.stringify(state.memoOverrides));
 }
 
 function setMark(id, person) {
@@ -55,20 +71,28 @@ function setMark(id, person) {
   }
 }
 
+/** Edit a transaction's memo in place and persist it so it survives reloading the same source CSV later. */
+function setMemo(id, text) {
+  const tx = state.transactionsById.get(id);
+  if (tx) tx.memo = text;
+  state.memoOverrides[id] = text;
+  saveMemoOverrides();
+}
+
 // ---------- CSV loading ----------
 
 /**
  * Detect whether a decoded CSV is a raw MoneyForward ME export or this
- * tool's own previously-exported ledger (which also carries marks), and
- * parse it accordingly.
+ * tool's own previously-exported ledger (which also carries marks and
+ * memo edits), and parse it accordingly.
  */
 function parseAnyCsv(text, sourceLabel) {
   const [header] = parseCsvRows(text.replace(/^\uFEFF/, ""));
   if (isLedgerCsvHeader(header)) {
     const { transactions, marks } = parseLedgerCsv(text, sourceLabel);
-    return { transactions, marks };
+    return { transactions, marks, isLedger: true };
   }
-  return { transactions: parseMoneyForwardCsv(text, sourceLabel), marks: {} };
+  return { transactions: parseMoneyForwardCsv(text, sourceLabel), marks: {}, isLedger: false };
 }
 
 /**
@@ -120,6 +144,7 @@ async function handleFiles(fileList) {
     const parsed = await Promise.all(files.map(readFile));
     const { transactions, duplicateCount } = combineTransactions(parsed.map((p) => p.transactions));
     state.transactions = transactions;
+    state.transactionsById = new Map(transactions.map((tx) => [tx.id, tx]));
 
     // A fresh set of files is a new dataset; stale filters from a previous
     // load (e.g. a month that no longer exists) would otherwise silently
@@ -127,16 +152,30 @@ async function handleFiles(fileList) {
     state.filters = { month: "", person: "" };
     document.getElementById("person-filter").value = "";
 
-    // Marks embedded in a previously exported ledger CSV (if any) restore
-    // the person assignment without needing a separate JSON import.
+    // Marks + memo edits embedded in a previously exported ledger CSV (if
+    // any) take precedence over locally cached values, restoring exactly
+    // what was exported without needing a separate JSON import.
     let restoredMarkCount = 0;
-    for (const { marks } of parsed) {
+    let memoOverridesChanged = false;
+    for (const { marks, transactions: srcTxs, isLedger } of parsed) {
       for (const [id, person] of Object.entries(marks)) {
         state.marks[id] = person;
         restoredMarkCount++;
       }
+      if (isLedger) {
+        for (const tx of srcTxs) {
+          state.memoOverrides[tx.id] = tx.memo;
+          memoOverridesChanged = true;
+        }
+      }
     }
     if (restoredMarkCount > 0) saveMarks();
+
+    // Apply persisted memo edits on top (covers both a raw MoneyForward
+    // reload restoring prior edits, and re-applying a ledger's own memos
+    // after combineTransactions/dedupe).
+    applyMemoOverrides(transactions, state.memoOverrides);
+    if (memoOverridesChanged) saveMemoOverrides();
 
     const months = [...new Set(transactions.map((t) => t.month))].sort();
     statusEl.textContent = `${files.length}ファイルから${transactions.length}件の明細を読み込みました（対象月: ${months.join(", ")}${
@@ -308,6 +347,7 @@ function renderLedger() {
           <td class="num ${tx.amount < 0 ? "neg" : "pos"}">${yen(tx.amount)}</td>
           <td>${escapeHtml(tx.institution)}</td>
           <td>${escapeHtml(tx.majorCategory)} / ${escapeHtml(tx.minorCategory)}</td>
+          <td><input type="text" class="memo-input" value="${escapeHtml(tx.memo || "")}" placeholder="メモ" /></td>
           <td>${badges}</td>
           <td><select class="mark-select">${options}</select></td>
         </tr>
@@ -319,7 +359,7 @@ function renderLedger() {
     <table class="ledger-table">
       <thead>
         <tr>
-          <th>日付</th><th>内容</th><th>金額</th><th>保有金融機関</th><th>カテゴリ</th><th></th><th>負担者</th>
+          <th>日付</th><th>内容</th><th>金額</th><th>保有金融機関</th><th>カテゴリ</th><th>メモ</th><th></th><th>負担者</th>
         </tr>
       </thead>
       <tbody>${rowsHtml}</tbody>
@@ -330,6 +370,18 @@ function renderLedger() {
     select.addEventListener("change", (e) => {
       const tr = e.target.closest("tr");
       setMark(tr.dataset.id, e.target.value);
+    });
+  });
+
+  container.querySelectorAll("tr[data-id] .memo-input").forEach((input) => {
+    input.addEventListener("change", (e) => {
+      const tr = e.target.closest("tr");
+      setMemo(tr.dataset.id, e.target.value);
+    });
+    // "change" only fires on blur; let Enter commit the edit immediately
+    // too, since this plain <input> isn't inside a <form>.
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") e.target.blur();
     });
   });
 }
@@ -356,17 +408,29 @@ function exportMarks() {
 
 const VALID_MARK_KEYS = new Set(MARK_KEYS);
 
-/** Accepts either a JSON marks export or a ledger CSV (from this tool's own CSV export). */
-async function importMarks(file) {
+/**
+ * Accepts either a JSON marks export or this tool's own ledger CSV. A
+ * ledger CSV also carries memo edits, which are restored onto the
+ * currently loaded transactions (matched by id) in the same step.
+ */
+async function importMarksAndMemos(file) {
   const statusEl = document.getElementById("load-status");
 
   try {
     const text = await file.text();
     let incoming;
+    let importedMemoCount = 0;
 
     const [header] = parseCsvRows(text.replace(/^\uFEFF/, ""));
     if (isLedgerCsvHeader(header)) {
-      ({ marks: incoming } = parseLedgerCsv(text));
+      const { marks, transactions: srcTxs } = parseLedgerCsv(text);
+      incoming = marks;
+      for (const tx of srcTxs) {
+        state.memoOverrides[tx.id] = tx.memo;
+        importedMemoCount++;
+      }
+      applyMemoOverrides(state.transactions, state.memoOverrides);
+      saveMemoOverrides();
     } else {
       const data = JSON.parse(text);
       incoming = data.marks || data;
@@ -382,9 +446,11 @@ async function importMarks(file) {
     renderLedger();
 
     statusEl.classList.remove("error");
-    statusEl.textContent = `マークを ${validEntries.length} 件インポートしました。`;
+    statusEl.textContent = `マークを ${validEntries.length} 件インポートしました${
+      importedMemoCount ? ` / メモ ${importedMemoCount} 件も復元しました` : ""
+    }。`;
   } catch (err) {
-    statusEl.textContent = `マークのインポートに失敗しました: ${err.message}`;
+    statusEl.textContent = `マーク・メモのインポートに失敗しました: ${err.message}`;
     statusEl.classList.add("error");
     // eslint-disable-next-line no-console
     console.error(err);
@@ -436,6 +502,7 @@ function initDropzone() {
 
 function init() {
   state.marks = loadMarks();
+  state.memoOverrides = loadMemoOverrides();
 
   initDropzone();
   document.getElementById("file-input").addEventListener("change", (e) => {
@@ -471,7 +538,7 @@ function init() {
   });
   document.getElementById("export-marks").addEventListener("click", exportMarks);
   document.getElementById("import-marks").addEventListener("change", (e) => {
-    if (e.target.files[0]) importMarks(e.target.files[0]);
+    if (e.target.files[0]) importMarksAndMemos(e.target.files[0]);
     e.target.value = "";
   });
   document.getElementById("export-ledger-csv").addEventListener("click", exportLedgerCsv);
