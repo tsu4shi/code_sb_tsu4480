@@ -57,6 +57,8 @@ See [`docs/kakeibo.md`](docs/kakeibo.md) for full usage (including the CLI) and 
 
 **Note:** Never commit real exported CSVs or ledgers — the `data/` directory is gitignored for this reason.
 
+This tool is 100% client-side, so it can also be hosted as a static site and used from a phone browser via GitHub Pages (`.github/workflows/deploy-pages.yml`, requires a one-time `Settings → Pages → Source = GitHub Actions` setup) — see [`docs/kakeibo.md`](docs/kakeibo.md) for details. Note the deployed page is publicly reachable (no login) since this repo is public.
+
 ## Parcel demo (legacy sandbox)
 
 ```bash

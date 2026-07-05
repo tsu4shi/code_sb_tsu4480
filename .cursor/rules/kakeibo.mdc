@@ -6,6 +6,7 @@ globs:
   - test/kakeibo/**
   - docs/kakeibo.md
   - kakeibo.html
+  - .github/workflows/deploy-pages.yml
 ---
 
 # Kakeibo (Household Budget) Tool — Development Rules
@@ -68,3 +69,16 @@ globs:
 
 - Keep the browser UI dependency-free (no frameworks) and served via Parcel
   as a separate entry point (`kakeibo.html`), not merged into `index.html`.
+
+## Deployment (GitHub Pages)
+
+- `.github/workflows/deploy-pages.yml` builds `index.html` and `kakeibo.html`
+  as a static site and deploys it to GitHub Pages on push to `main`. Since
+  this repo is public, the deployed site is publicly reachable with no
+  auth — that's acceptable *only* because the tool never sends parsed data
+  anywhere and starts empty until a user supplies their own CSV. Do not add
+  any server-side component, analytics, or third-party script to this tool
+  that would change that privacy story.
+- Keep the `--public-url` flag in the workflow in sync with the GitHub Pages
+  project path (`/${{ github.event.repository.name }}/`) so built asset URLs
+  resolve correctly under the project subpath.
