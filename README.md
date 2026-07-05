@@ -43,6 +43,20 @@ docs/               Human-facing documentation
 
 The Parcel browser demo (`index.html` → `src/index3.js`) is separate from the news tool.
 
+## Kakeibo (household budget) tool
+
+Combines MoneyForward ME "収入・支出詳細" CSV exports into one ledger, lets you mark each transaction as yours / your spouse's / shared, and aggregates expenses by month and person. Runs entirely in the browser (no data leaves your machine); a CLI is also available for a spreadsheet-based workflow.
+
+```bash
+npm install
+npm run kakeibo
+# open http://localhost:1235/kakeibo.html and select your exported CSVs
+```
+
+See [`docs/kakeibo.md`](docs/kakeibo.md) for full usage (including the CLI) and the data format.
+
+**Note:** Never commit real exported CSVs or ledgers — the `data/` directory is gitignored for this reason.
+
 ## Parcel demo (legacy sandbox)
 
 ```bash
