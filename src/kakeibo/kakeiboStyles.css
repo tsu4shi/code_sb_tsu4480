@@ -1,0 +1,427 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* Prevent iOS Safari from bumping the base text size up in landscape. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  background: #f5f6f8;
+  color: #222;
+  margin: 0;
+  padding: 24px;
+}
+
+#app {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* Tablet and phone: less wasted edge padding. */
+@media (max-width: 700px) {
+  body {
+    padding: 12px;
+  }
+
+  .panel {
+    padding: 12px 14px;
+  }
+}
+
+header h1 {
+  margin-bottom: 4px;
+}
+
+.subtitle {
+  color: #555;
+}
+
+.privacy-note {
+  font-size: 0.85em;
+  color: #777;
+  background: #eef4ff;
+  border: 1px solid #cfe0ff;
+  border-radius: 6px;
+  padding: 8px 12px;
+  display: inline-block;
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.panel.hidden {
+  display: none;
+}
+
+.dropzone {
+  display: block;
+  border: 2px dashed #aab4c0;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  background: #fafbfc;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.dropzone p {
+  margin: 4px 0;
+  /* Keep drag/click events targeted at the dropzone itself, not its text
+     children, to avoid dragenter/dragleave flicker as the cursor crosses
+     child element boundaries while dragging files over the label. */
+  pointer-events: none;
+}
+
+.dropzone .hint {
+  font-size: 0.85em;
+  color: #888;
+}
+
+.dropzone.dragover {
+  border-color: #2266cc;
+  background: #eef4ff;
+}
+
+.dropzone input[type="file"] {
+  margin-top: 10px;
+}
+
+.status {
+  margin-top: 10px;
+  font-weight: 600;
+}
+
+.status.error {
+  color: #c0392b;
+}
+
+.bulk-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid #888;
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.9em;
+  /* Comfortable tap target on touch devices without changing desktop feel. */
+  min-height: 36px;
+}
+
+button:hover {
+  background: #f0f0f0;
+}
+
+button.danger {
+  border-color: #c0392b;
+  color: #c0392b;
+}
+
+button.danger:hover {
+  background: #fdecea;
+}
+
+select,
+input[type="file"],
+input[type="text"] {
+  font-size: 0.9em;
+  padding: 4px 6px;
+  max-width: 100%;
+}
+
+select {
+  /* Long option labels (e.g. "三井アウトレットパーク入間 (72件)") get
+     abruptly clipped mid-character by the browser on narrow screens
+     without this — show "…" instead so it's clear text is truncated. */
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9em;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.ledger-toolbar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9em;
+}
+
+th,
+td {
+  border: 1px solid #e0e0e0;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+th {
+  background: #f0f2f5;
+  position: sticky;
+  top: 0;
+}
+
+td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+td.neg {
+  color: #c0392b;
+}
+
+td.pos {
+  color: #2266cc;
+}
+
+td.muted {
+  color: #999;
+}
+
+td.total,
+tr.grand-total td {
+  font-weight: 700;
+}
+
+tr.grand-total {
+  background: #f7f9fc;
+}
+
+tr.excluded-row {
+  background: #fafafa;
+  color: #999;
+}
+
+.memo-input {
+  width: 100%;
+  min-width: 100px;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 3px 4px;
+  font-size: 0.95em;
+  font-family: inherit;
+  color: inherit;
+}
+
+.memo-input:hover {
+  border-color: #d5d5d5;
+}
+
+.memo-input:focus {
+  border-color: #2266cc;
+  background: #fff;
+  outline: none;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.75em;
+  background: #eee;
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-right: 3px;
+}
+
+.badge.income {
+  background: #e3f2ff;
+  color: #2266cc;
+}
+
+/* No-op on desktop (default inline flow, unchanged from before); only
+   the phone breakpoint turns this into a right-aligned wrapping group so
+   multiple badges don't get spread apart by the card row's flexbox. */
+.cell-value {
+  display: inline;
+}
+
+.hint {
+  font-size: 0.85em;
+  color: #777;
+}
+
+#ledger-table-container {
+  max-height: 600px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+#summary-table-container {
+  /* On phones the summary table is kept as a real table (not a card list)
+     since side-by-side month comparison is the whole point; it scrolls
+     horizontally instead of squeezing columns unreadably thin. */
+  overflow-x: auto;
+}
+
+.summary-table {
+  max-width: 700px;
+  min-width: 480px;
+}
+
+/* ===================================================================
+   Phone layout (also applies to small tablets in portrait)
+   =================================================================== */
+@media (max-width: 700px) {
+  header h1 {
+    font-size: 1.4em;
+  }
+
+  .subtitle,
+  .privacy-note {
+    font-size: 0.9em;
+  }
+
+  .dropzone {
+    padding: 16px 10px;
+  }
+
+  /* Stack each control group full-width instead of a cramped wrapped row;
+     much easier to tap accurately on a phone screen. */
+  .bulk-controls,
+  .ledger-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .bulk-controls > *,
+  .ledger-toolbar > * {
+    width: 100%;
+  }
+
+  .checkbox-label {
+    white-space: normal;
+  }
+
+  /* inline-flex refuses to wrap its long label text within a narrow flex
+     item by default, which pushed the whole page wider than the
+     viewport. Let it wrap onto multiple lines like a normal paragraph. */
+  .file-label {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  /* iOS Safari auto-zooms the page when focusing a form control whose
+     computed font-size is under 16px. Bump form controls up to avoid
+     that jarring zoom on every tap (desktop/tablet keep the compact size
+     since this rule only applies inside the phone breakpoint). */
+  select,
+  button,
+  input[type="text"],
+  input[type="file"] {
+    font-size: 16px;
+  }
+
+  /* ---- Ledger table -> stacked cards ---- */
+  .ledger-table thead {
+    /* Visually hidden but still announced by screen readers. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .ledger-table,
+  .ledger-table tbody,
+  .ledger-table tr,
+  .ledger-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .ledger-table tr {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 6px 10px;
+    margin-bottom: 10px;
+    background: #fff;
+  }
+
+  .ledger-table tr.excluded-row {
+    background: #fafafa;
+  }
+
+  .ledger-table tr.grand-total {
+    /* Not used in the ledger table today, kept for safety if reused. */
+    background: #f7f9fc;
+  }
+
+  .ledger-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+    padding: 7px 0;
+  }
+
+  .ledger-table td:last-child {
+    border-bottom: none;
+  }
+
+  /* Turn the column header into a label in front of each value, using
+     the data-label attribute rendered on each <td> (see kakeiboApp.js). */
+  .ledger-table td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-weight: 600;
+    color: #777;
+    font-size: 0.8em;
+  }
+
+  .ledger-table td.num {
+    text-align: right;
+  }
+
+  .cell-value {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+  }
+
+  .ledger-table .memo-input,
+  .ledger-table .mark-select {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    text-align: right;
+  }
+}

@@ -1,0 +1,92 @@
+---
+description: Rules for developing the household budget (kakeibo) analysis tool
+globs:
+  - src/kakeibo/**
+  - tools/kakeibo/**
+  - test/kakeibo/**
+  - docs/kakeibo.md
+  - kakeibo.html
+  - .github/workflows/deploy-pages.yml
+---
+
+# Kakeibo (Household Budget) Tool — Development Rules
+
+## Scope
+
+- Build and maintain **MoneyForward ME CSV ingestion, combining, marking, and
+  month x person expense aggregation** only.
+- Do not add budgeting advice, spending predictions, or investment logic.
+- Keep this tool independent from the Parcel demo (`src/index3.js`) and the
+  US market news tool (`src/news/**`).
+
+## Privacy (critical)
+
+- This is personal financial data. **Never commit real MoneyForward export
+  CSVs, combined ledgers, or exported mark files to the repository.**
+- `data/` is gitignored for exactly this reason — keep it that way.
+- The browser app (`kakeiboApp.js`) must never send parsed data anywhere; all
+  parsing/aggregation stays client-side (`fetch`/`XMLHttpRequest` calls are
+  not allowed in this module).
+- Tests and fixtures must use fabricated/anonymized data only, never real
+  names, real account names, or real amounts from an actual export.
+- Do not log full transaction contents (merchant names, memos) to the
+  console in production code paths; status/error logs should stay limited to
+  counts and non-sensitive metadata.
+
+## Data model
+
+- Core parsing/combining/aggregation logic (`csv.js`,
+  `parseMoneyForwardCsv.js`, `combineTransactions.js`, `aggregate.js`,
+  `ledgerCsv.js`) must stay framework-agnostic plain JS (no `fs`, no DOM) so
+  it can run unchanged in both the Node CLI and the browser bundle.
+- `ledgerCsv.js` is this tool's own round-trippable export format (carries
+  marks alongside transaction data). Keep `buildLedgerCsv`/`parseLedgerCsv`
+  in sync with each other and with `LEDGER_HEADER` — a browser reload must be
+  able to fully restore state from a previously downloaded ledger CSV alone.
+- Transaction identity is the MoneyForward `ID` column; dedupe, mark
+  persistence, and memo-edit persistence must always key off of it. The ID
+  is intentionally never rendered as a visible ledger table column, but it
+  must always be captured on import and preserved on every export.
+- The `メモ` (memo) column from MoneyForward exports is a real, editable
+  field, not incidental metadata: it must be parsed in, shown/editable in
+  the ledger table, preserved on ledger CSV export, and restored on
+  reimport (both via the ledger CSV round-trip and via `memoOverrides.js`
+  for the "reload the same raw MoneyForward CSV" case, which has no other
+  way to remember an edit).
+- Expense aggregation must exclude: income rows (amount >= 0), transfers
+  (`振替` = 1), and rows excluded from MoneyForward's own calculation
+  (`計算対象` = 0). Keep this logic centralized in
+  `aggregate.js#isExpenseEligible`.
+- The mark value set is `PERSON_ME` / `PERSON_SPOUSE` / `PERSON_SHARED` /
+  `PERSON_EXCLUDED` (`MARK_KEYS` in `aggregate.js`). `PERSON_EXCLUDED`
+  ("除外") is a manual override for money-movement-only transactions
+  MoneyForward didn't flag as a transfer (e.g. a bank wire) — it must be
+  dropped from every total (`totals`, `byMonth`, `unmarked`), tracked only
+  in `excludedByMark` for transparency, and must never be added to
+  `PERSON_KEYS` (which is specifically the set of columns shown in the
+  money totals table).
+
+## Testing
+
+- Add/keep unit tests in `test/kakeibo/` for any change to parsing, combining
+  or aggregation logic. Use `node --test`.
+- Never add real personal CSVs as test fixtures; construct minimal inline
+  CSV strings with made-up data instead.
+
+## UI
+
+- Keep the browser UI dependency-free (no frameworks) and served via Parcel
+  as a separate entry point (`kakeibo.html`), not merged into `index.html`.
+
+## Deployment (GitHub Pages)
+
+- `.github/workflows/deploy-pages.yml` builds `index.html` and `kakeibo.html`
+  as a static site and deploys it to GitHub Pages on push to `main`. Since
+  this repo is public, the deployed site is publicly reachable with no
+  auth — that's acceptable *only* because the tool never sends parsed data
+  anywhere and starts empty until a user supplies their own CSV. Do not add
+  any server-side component, analytics, or third-party script to this tool
+  that would change that privacy story.
+- Keep the `--public-url` flag in the workflow in sync with the GitHub Pages
+  project path (`/${{ github.event.repository.name }}/`) so built asset URLs
+  resolve correctly under the project subpath.

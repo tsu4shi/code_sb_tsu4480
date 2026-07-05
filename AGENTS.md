@@ -38,3 +38,25 @@ A separate **Node CLI** fetches US stock market news via the Finnhub API. It is 
 
 - Fetch and normalize news only — no investment advice, predictions, or trading logic
 - Do not modify `src/index3.js` for news features unless explicitly requested
+
+## Kakeibo (household budget) tool
+
+A separate **browser tool + Node CLI** for combining MoneyForward ME "収入・支出詳細" CSV exports into one ledger, letting the user manually mark each transaction as belonging to themselves/spouse/shared/excluded (excluded = money-movement-only transactions, e.g. a bank transfer, that should be dropped from all totals), and aggregating expenses by month and person. It is independent of the Parcel demo and the news tool.
+
+- Browser entry: `kakeibo.html` → `src/kakeibo/kakeiboApp.js` (run via `npm run kakeibo`, serves on port 1235). All CSV parsing/marking/aggregation happens client-side; nothing is sent to a server.
+- Core modules (framework-agnostic, shared by browser + CLI): `src/kakeibo/csv.js`, `parseMoneyForwardCsv.js`, `combineTransactions.js`, `aggregate.js`, `ledgerCsv.js` (read/write the tool's own "全データCSV" export format, which round-trips both transactions and marks)
+- CLI entry point: `node tools/kakeibo/cli.js` (`combine` and `summarize` subcommands) for users who prefer a spreadsheet workflow
+- Human docs: `docs/kakeibo.md`
+- Agent rules: `.cursor/rules/kakeibo.mdc`
+- Tests: `test/kakeibo/kakeibo.test.js` (run via `npm test`), using only fabricated sample data
+- Deployment: `.github/workflows/deploy-pages.yml` builds and deploys `index.html` + `kakeibo.html` as a static site to GitHub Pages on push to `main` (requires Settings → Pages → Source = GitHub Actions to be enabled once, manually, on GitHub)
+
+### Privacy (critical)
+
+- This tool processes real personal financial data. **Never commit actual MoneyForward export CSVs, combined ledgers, or exported mark files.** The `data/` directory is gitignored for this reason — keep it that way.
+- Test fixtures must use fabricated data only, never a real export.
+
+### Scope limits
+
+- Combine, mark, and aggregate expenses only — no budgeting advice, spending predictions, or investment logic
+- Keep separate from `src/index3.js` and `src/news/**` unless explicitly requested otherwise

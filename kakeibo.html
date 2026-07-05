@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>家計簿 集計ツール（MoneyForward ME）</title>
+    <link rel="stylesheet" href="src/kakeibo/kakeiboStyles.css" />
+  </head>
+
+  <body>
+    <div id="app">
+      <header>
+        <h1>家計簿 集計ツール</h1>
+        <p class="subtitle">
+          MoneyForward ME からエクスポートした「収入・支出詳細」CSVを読み込み、明細ごとに負担者（私 / 妻 /
+          共通 / 除外）をマークして、月別の出費集計を作成します。「除外」は銀行振り込みなど口座間の資金移動だけで、集計対象にしたくない明細に使います。
+        </p>
+        <p class="privacy-note">
+          ※ このページはブラウザ内だけでCSVを処理します。データはどこにも送信されません。マーク結果はこの端末の
+          localStorage に保存されます。
+        </p>
+      </header>
+
+      <section id="load-section" class="panel">
+        <h2>1. CSVを読み込む</h2>
+        <p>
+          MoneyForward ME の「収入・支出詳細」でエクスポートしたCSVファイルを、月をまたいで複数選択してください（Shift_JIS
+          / CP932 形式のまま読み込めます）。以前この画面で保存した「全データCSV」を選択すると、明細とマークの両方が復元されます（新しい月のCSVと一緒に選んでもOKです）。
+        </p>
+        <label id="dropzone" class="dropzone" for="file-input">
+          <p>ここに複数のCSVファイルをドラッグ＆ドロップ</p>
+          <p class="hint">またはクリックしてファイルを選択</p>
+          <input type="file" id="file-input" accept=".csv" multiple />
+        </label>
+        <div id="load-status" class="status"></div>
+      </section>
+
+      <section id="bulk-section" class="panel hidden">
+        <h2>2. まとめて一括マーク（任意）</h2>
+        <p>
+          「保有金融機関」や「内容」でまとめて設定すると、個別に選ぶ手間を減らせます。「上書きする」にチェックを入れない限り、既にマーク済みの明細は変更されません。
+        </p>
+        <div class="bulk-controls">
+          <label>保有金融機関:</label>
+          <select id="bulk-institution"></select>
+          <select id="bulk-person">
+            <option value="">-- 負担者を選択 --</option>
+            <option value="me">私</option>
+            <option value="spouse">妻</option>
+            <option value="shared">共通</option>
+            <option value="excluded">除外</option>
+          </select>
+          <label class="checkbox-label"><input type="checkbox" id="bulk-overwrite" /> 既存のマークを上書きする</label>
+          <button id="bulk-apply">適用</button>
+        </div>
+        <div class="bulk-controls">
+          <label>内容:</label>
+          <select id="bulk-content"></select>
+          <select id="bulk-content-person">
+            <option value="">-- 負担者を選択 --</option>
+            <option value="me">私</option>
+            <option value="spouse">妻</option>
+            <option value="shared">共通</option>
+            <option value="excluded">除外</option>
+          </select>
+          <label class="checkbox-label"><input type="checkbox" id="bulk-content-overwrite" /> 既存のマークを上書きする</label>
+          <button id="bulk-content-apply">適用</button>
+        </div>
+      </section>
+
+      <section id="summary-section" class="panel hidden">
+        <h2>3. 月別集計</h2>
+        <div id="summary-table-container"></div>
+      </section>
+
+      <section id="ledger-section" class="panel hidden">
+        <h2>明細一覧（<span id="ledger-count">0</span> 件）</h2>
+        <div class="ledger-toolbar">
+          <label
+            >月で絞り込み:
+            <select id="month-filter">
+              <option value="">すべて</option>
+            </select>
+          </label>
+          <label
+            >負担者で絞り込み:
+            <select id="person-filter">
+              <option value="">すべて</option>
+              <option value="unset">未設定</option>
+              <option value="me">私</option>
+              <option value="spouse">妻</option>
+              <option value="shared">共通</option>
+              <option value="excluded">除外</option>
+            </select>
+          </label>
+          <button id="export-marks">マークをエクスポート</button>
+          <label class="file-label"
+            >マーク・メモをインポート（JSON または 全データCSV）
+            <input type="file" id="import-marks" accept=".json,.csv" />
+          </label>
+          <button id="export-ledger-csv">全データCSVをダウンロード</button>
+          <button id="clear-marks" class="danger">マークを全消去</button>
+        </div>
+        <div id="ledger-table-container"></div>
+      </section>
+    </div>
+    <script src="src/kakeibo/kakeiboApp.js"></script>
+  </body>
+</html>
