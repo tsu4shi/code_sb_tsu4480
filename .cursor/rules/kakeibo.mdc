@@ -43,8 +43,16 @@ globs:
   marks alongside transaction data). Keep `buildLedgerCsv`/`parseLedgerCsv`
   in sync with each other and with `LEDGER_HEADER` — a browser reload must be
   able to fully restore state from a previously downloaded ledger CSV alone.
-- Transaction identity is the MoneyForward `ID` column; dedupe and mark
-  persistence must always key off of it.
+- Transaction identity is the MoneyForward `ID` column; dedupe, mark
+  persistence, and memo-edit persistence must always key off of it. The ID
+  is intentionally never rendered as a visible ledger table column, but it
+  must always be captured on import and preserved on every export.
+- The `メモ` (memo) column from MoneyForward exports is a real, editable
+  field, not incidental metadata: it must be parsed in, shown/editable in
+  the ledger table, preserved on ledger CSV export, and restored on
+  reimport (both via the ledger CSV round-trip and via `memoOverrides.js`
+  for the "reload the same raw MoneyForward CSV" case, which has no other
+  way to remember an edit).
 - Expense aggregation must exclude: income rows (amount >= 0), transfers
   (`振替` = 1), and rows excluded from MoneyForward's own calculation
   (`計算対象` = 0). Keep this logic centralized in

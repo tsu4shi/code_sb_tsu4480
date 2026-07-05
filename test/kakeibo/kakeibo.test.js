@@ -13,6 +13,7 @@ import {
   PERSON_EXCLUDED,
 } from "../../src/kakeibo/aggregate.js";
 import { buildLedgerCsv, parseLedgerCsv, isLedgerCsvHeader } from "../../src/kakeibo/ledgerCsv.js";
+import { applyMemoOverrides } from "../../src/kakeibo/memoOverrides.js";
 
 const HEADER =
   '"計算対象","日付","内容","金額（円）","保有金融機関","大項目","中項目","メモ","振替","ID"';
@@ -53,6 +54,15 @@ test("parseMoneyForwardCsv maps columns, dates and amounts", () => {
 
   assert.equal(third.isCalcTarget, false);
   assert.equal(third.isTransfer, true);
+});
+
+test("parseMoneyForwardCsv captures the memo column and the id (kept for internal use, not display)", () => {
+  const csv = sampleCsv([
+    '"1","2026/01/31","スーパーで買い物","-1234","太郎_カードA","食費","食料品","来客用のお菓子","0","id-1"',
+  ]);
+  const [tx] = parseMoneyForwardCsv(csv);
+  assert.equal(tx.memo, "来客用のお菓子");
+  assert.equal(tx.id, "id-1");
 });
 
 test("parseMoneyForwardCsv is tolerant of column reordering", () => {
@@ -175,15 +185,18 @@ test("summarizeByMonthAndPerson drops 除外-marked expenses from all totals", (
   assert.deepEqual(summary.byMonth["2026-02"], { [PERSON_ME]: 0, [PERSON_SPOUSE]: 0, [PERSON_SHARED]: 0 });
 });
 
-test("buildLedgerCsv + parseLedgerCsv round-trips transactions and marks", () => {
+test("buildLedgerCsv + parseLedgerCsv round-trips transactions, marks, memo and id", () => {
   const txs = parseMoneyForwardCsv(
     sampleCsv([
-      '"1","2026/01/10","私の食費","-1000","太郎_カードA","食費","食料品","","0","id-1"',
+      '"1","2026/01/10","私の食費","-1000","太郎_カードA","食費","食料品","元々のメモ","0","id-1"',
       '"1","2026/01/20","妻の食費","-2000","花子_カードB","食費","食料品","","0","id-2"',
       '"1","2026/01/25","口座振替","-500","太郎_銀行A","収入","振り替え","","1","id-3"',
     ])
   );
   const marks = { "id-1": PERSON_ME, "id-2": PERSON_SPOUSE, "id-3": PERSON_EXCLUDED };
+
+  // Simulate a memo edit made inside the tool before exporting.
+  txs[1].memo = "スーパーでまとめ買い（編集済み）";
 
   const csv = buildLedgerCsv(txs, marks);
   assert.ok(isLedgerCsvHeader(parseCsvRows(csv.replace(/^\uFEFF/, ""))[0]));
@@ -199,10 +212,46 @@ test("buildLedgerCsv + parseLedgerCsv round-trips transactions and marks", () =>
   assert.equal(restored[0].month, "2026-01");
   assert.equal(restored[2].isTransfer, true);
 
+  // The id column survives the round-trip even though it's never rendered
+  // as a visible ledger table column in the UI.
+  assert.equal(restored[0].id, "id-1");
+  // The original memo and the edited memo both round-trip correctly.
+  assert.equal(restored[0].memo, "元々のメモ");
+  assert.equal(restored[1].memo, "スーパーでまとめ買い（編集済み）");
+
   assert.deepEqual(restoredMarks, { "id-1": PERSON_ME, "id-2": PERSON_SPOUSE, "id-3": PERSON_EXCLUDED });
 });
 
 test("isLedgerCsvHeader rejects a raw MoneyForward header", () => {
   const [rawHeader] = parseCsvRows(HEADER);
   assert.equal(isLedgerCsvHeader(rawHeader), false);
+});
+
+test("applyMemoOverrides restores edited memos on top of freshly parsed transactions", () => {
+  const txs = parseMoneyForwardCsv(
+    sampleCsv([
+      '"1","2026/01/10","私の食費","-1000","太郎_カードA","食費","食料品","元のメモ","0","id-1"',
+      '"1","2026/01/20","妻の食費","-2000","花子_カードB","食費","食料品","","0","id-2"',
+    ])
+  );
+
+  const overrides = {
+    "id-1": "編集済みメモ",
+    "id-2": "", // an explicit, deliberate clear must also be respected
+    "id-999": "存在しない明細への上書きは無視される",
+  };
+
+  const result = applyMemoOverrides(txs, overrides);
+
+  assert.equal(result, txs); // mutates and returns the same array
+  assert.equal(txs[0].memo, "編集済みメモ");
+  assert.equal(txs[1].memo, "");
+});
+
+test("applyMemoOverrides is a no-op when there are no overrides", () => {
+  const txs = parseMoneyForwardCsv(
+    sampleCsv(['"1","2026/01/10","私の食費","-1000","太郎_カードA","食費","食料品","元のメモ","0","id-1"'])
+  );
+  applyMemoOverrides(txs, {});
+  assert.equal(txs[0].memo, "元のメモ");
 });
