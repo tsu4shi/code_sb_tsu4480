@@ -12,7 +12,7 @@ export const PERSON_SHARED = "shared";
 export const PERSON_EXCLUDED = "excluded";
 export const PERSON_UNSET = "unset";
 
-/** Marks that contribute to the money totals table (私/妻/共通). */
+/** Marks that contribute to the money totals table (夫/妻/共通). */
 export const PERSON_KEYS = [PERSON_ME, PERSON_SPOUSE, PERSON_SHARED];
 
 /** All valid mark values a transaction can be tagged with, including 除外. */
@@ -20,7 +20,7 @@ export const MARK_KEYS = [PERSON_ME, PERSON_SPOUSE, PERSON_SHARED, PERSON_EXCLUD
 
 /** Japanese display labels for each mark value. */
 export const PERSON_LABELS_JA = {
-  [PERSON_ME]: "私",
+  [PERSON_ME]: "夫",
   [PERSON_SPOUSE]: "妻",
   [PERSON_SHARED]: "共通",
   [PERSON_EXCLUDED]: "除外",
@@ -28,6 +28,7 @@ export const PERSON_LABELS_JA = {
 
 /** Reverse lookup: Japanese label -> mark value (accepts English keys too). */
 export const PERSON_LABEL_TO_KEY = {
+  夫: PERSON_ME,
   私: PERSON_ME,
   妻: PERSON_SPOUSE,
   共通: PERSON_SHARED,
