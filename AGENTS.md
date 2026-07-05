@@ -48,6 +48,7 @@ A separate **browser tool + Node CLI** for combining MoneyForward ME "収入・�
 - Human docs: `docs/kakeibo.md`
 - Agent rules: `.cursor/rules/kakeibo.mdc`
 - Tests: `test/kakeibo/kakeibo.test.js` (run via `npm test`), using only fabricated sample data
+- Deployment: `.github/workflows/deploy-pages.yml` builds and deploys `index.html` + `kakeibo.html` as a static site to GitHub Pages on push to `main` (requires Settings → Pages → Source = GitHub Actions to be enabled once, manually, on GitHub)
 
 ### Privacy (critical)
 
