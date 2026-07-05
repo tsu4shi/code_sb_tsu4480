@@ -329,11 +329,21 @@ function renderLedger() {
     .map((tx) => {
       const mark = state.marks[tx.id] || "";
       const eligible = isExpenseEligible(tx) && mark !== PERSON_EXCLUDED;
+      // Each badge's origin: 振替/対象外 come straight from MoneyForward's
+      // own CSV columns (振替, 計算対象); 収入 is this tool's own judgement
+      // from the amount's sign (MoneyForward has no dedicated column for
+      // it); 除外 is a mark you set yourself in this tool (負担者=除外).
       const badges = [
-        tx.isTransfer ? '<span class="badge">振替</span>' : "",
-        !tx.isCalcTarget ? '<span class="badge">対象外</span>' : "",
-        tx.amount > 0 && !tx.isTransfer ? '<span class="badge income">収入</span>' : "",
-        mark === PERSON_EXCLUDED ? '<span class="badge">除外</span>' : "",
+        tx.isTransfer ? '<span class="badge" title="MoneyForward Me側の「振替」列（口座間振替）">振替</span>' : "",
+        !tx.isCalcTarget
+          ? '<span class="badge" title="MoneyForward Me側で「計算対象外」に設定されている明細">対象外</span>'
+          : "",
+        tx.amount > 0 && !tx.isTransfer
+          ? '<span class="badge income" title="金額がプラス（このツールが金額の符号から判定。MoneyForward側に収入専用の列はありません）">収入</span>'
+          : "",
+        mark === PERSON_EXCLUDED
+          ? '<span class="badge" title="このツールで負担者を「除外」に手動設定した明細">除外</span>'
+          : "",
       ].join("");
 
       const options = ["", ...MARK_KEYS]
@@ -359,7 +369,7 @@ function renderLedger() {
     <table class="ledger-table">
       <thead>
         <tr>
-          <th>日付</th><th>内容</th><th>金額</th><th>保有金融機関</th><th>カテゴリ</th><th>メモ</th><th></th><th>負担者</th>
+          <th>日付</th><th>内容</th><th>金額</th><th>保有金融機関</th><th>カテゴリ</th><th>メモ</th><th>フラグ</th><th>負担者</th>
         </tr>
       </thead>
       <tbody>${rowsHtml}</tbody>
