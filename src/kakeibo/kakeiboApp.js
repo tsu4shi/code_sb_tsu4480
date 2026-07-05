@@ -369,7 +369,7 @@ function renderLedger() {
     <table class="ledger-table">
       <thead>
         <tr>
-          <th>日付</th><th>内容</th><th>金額</th><th>保有金融機関</th><th>カテゴリ</th><th>メモ</th><th>フラグ</th><th>負担者</th>
+          <th>日付</th><th>内容</th><th>金額</th><th>保有金融機関</th><th>カテゴリ</th><th>メモ</th><th>タグ</th><th>負担者</th>
         </tr>
       </thead>
       <tbody>${rowsHtml}</tbody>
