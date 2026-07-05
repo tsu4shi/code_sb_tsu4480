@@ -374,6 +374,20 @@ function renderLedger() {
   });
 
   container.querySelectorAll("tr[data-id] .memo-input").forEach((input) => {
+    // Keep the in-memory tx.memo in sync on every keystroke (cheap), not
+    // just on blur. Several other actions (bulk-mark apply, marking a row
+    // while a person filter is active, etc.) call renderLedger() and
+    // rebuild the whole table from state.transactions — without this, an
+    // in-progress, not-yet-blurred edit in one row would be silently
+    // discarded if the user triggers one of those from another row before
+    // tabbing away.
+    input.addEventListener("input", (e) => {
+      const tr = e.target.closest("tr");
+      const tx = state.transactionsById.get(tr.dataset.id);
+      if (tx) tx.memo = e.target.value;
+    });
+    // Persisting to localStorage on every keystroke is unnecessary, so
+    // that only happens on "change" (fires on blur if the value changed).
     input.addEventListener("change", (e) => {
       const tr = e.target.closest("tr");
       setMemo(tr.dataset.id, e.target.value);
