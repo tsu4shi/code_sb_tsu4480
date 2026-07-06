@@ -25,15 +25,15 @@
 1. [`supabase/migrations/001_initial_schema.sql`](../supabase/migrations/001_initial_schema.sql)
 2. [`supabase/migrations/002_allowed_emails_google.sql`](../supabase/migrations/002_allowed_emails_google.sql)
 
-002 には **`tsu4480@gmail.com`（夫）** が最初から登録されています。
+002 には **`tsu4480@gmail.com`（夫）** と **`tomopri320@gmail.com`（妻）** が登録されています。
 
-### 妻の Gmail を追加する
+### メールアドレスを追加・変更する
 
-妻の Google アカウントのメールアドレスが分かったら、SQL Editor で実行：
+SQL Editor で実行：
 
 ```sql
 insert into public.allowed_emails (email, note)
-values ('妻の@gmail.com', '妻');
+values ('追加@gmail.com', 'メモ');
 ```
 
 ## 3. Google OAuth 設定

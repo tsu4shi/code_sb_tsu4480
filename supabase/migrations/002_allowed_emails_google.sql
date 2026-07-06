@@ -16,10 +16,10 @@ comment on table public.allowed_emails is
 
 alter table public.allowed_emails enable row level security;
 
--- Husband (owner). Add wife with:
---   insert into public.allowed_emails (email, note) values ('wife@gmail.com', '妻');
-insert into public.allowed_emails (email, note)
-values ('tsu4480@gmail.com', '夫');
+-- Husband and wife (Google login allowlist)
+insert into public.allowed_emails (email, note) values
+  ('tsu4480@gmail.com', '夫'),
+  ('tomopri320@gmail.com', '妻');
 
 -- ---------------------------------------------------------------------------
 -- RPC: check allowlist (used by the browser after OAuth redirect)
