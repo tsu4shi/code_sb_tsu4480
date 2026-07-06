@@ -293,7 +293,7 @@ function renderSummary() {
     </table>
     <p class="hint">
       振替・計算対象外・収入の明細は集計から自動的に除外しています（除外件数: ${summary.excludedCount}件）。${manualExcludedHint}
-      「未設定」列はまだマークしていない支出です。
+      「未設定」列はまだマークしていない支出です（${summary.unmarked.count}件 / ${yen(summary.unmarked.amount)}）。
     </p>
   `;
 }
