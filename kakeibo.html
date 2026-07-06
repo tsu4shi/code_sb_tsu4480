@@ -15,11 +15,33 @@
           MoneyForward ME からエクスポートした「収入・支出詳細」CSVを読み込み、明細ごとに負担者（夫 / 妻 /
           共通 / 除外）をマークして、月別の出費集計を作成します。「除外」は銀行振り込みなど口座間の資金移動だけで、集計対象にしたくない明細に使います。
         </p>
-        <p class="privacy-note">
-          ※ このページはブラウザ内だけでCSVを処理します。データはどこにも送信されません。マーク結果はこの端末の
-          localStorage に保存されます。
+        <p class="privacy-note" id="privacy-note">
+          ※ このページはブラウザ内だけでCSVを処理します。Supabase を設定するとログイン後にクラウド DB
+          と同期します。未設定時は localStorage のみ。いずれも「全データCSV」でバックアップできます。
         </p>
       </header>
+
+      <section id="auth-section" class="panel hidden">
+        <h2>クラウド同期（Supabase）</h2>
+        <p class="hint">
+          メールでログインすると、明細・マーク・メモが端末間で同期されます。Supabase 未設定のビルドではこのセクションは表示されません。
+        </p>
+        <div id="auth-logged-out">
+          <form id="auth-form" class="auth-form">
+            <label
+              >メールアドレス:
+              <input type="email" id="auth-email" required placeholder="you@example.com" autocomplete="email" />
+            </label>
+            <button type="submit">ログインリンクを送信</button>
+          </form>
+        </div>
+        <div id="auth-logged-in" class="hidden">
+          <p>ログイン中: <strong id="auth-email-display"></strong></p>
+          <button type="button" id="auth-signout">ログアウト</button>
+        </div>
+        <div id="auth-status" class="status"></div>
+        <div id="sync-status" class="status hint"></div>
+      </section>
 
       <section id="load-section" class="panel">
         <h2>1. CSVを読み込む</h2>
@@ -104,6 +126,7 @@
         <div id="ledger-table-container"></div>
       </section>
     </div>
-    <script src="src/kakeibo/kakeiboApp.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script type="module" src="src/kakeibo/kakeiboApp.js"></script>
   </body>
 </html>

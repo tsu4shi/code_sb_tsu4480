@@ -30,6 +30,10 @@ jobs:
       - name: Build static site (Parcel demo + kakeibo tool)
         # Both entries are 100% client-side (no backend); the base path
         # matches this repo's GitHub Pages project URL.
+        # Supabase env vars are optional — empty means localStorage-only mode.
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: npx parcel build index.html kakeibo.html --out-dir dist --public-url /${{ github.event.repository.name }}/
 
       - uses: actions/configure-pages@v5

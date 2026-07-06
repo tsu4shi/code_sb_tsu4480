@@ -5,8 +5,11 @@ globs:
   - tools/kakeibo/**
   - test/kakeibo/**
   - docs/kakeibo.md
+  - docs/supabase-setup.md
+  - supabase/**
   - kakeibo.html
   - .github/workflows/deploy-pages.yml
+  - .github/workflows/supabase-keepalive.yml
 ---
 
 # Kakeibo (Household Budget) Tool — Development Rules
@@ -24,9 +27,13 @@ globs:
 - This is personal financial data. **Never commit real MoneyForward export
   CSVs, combined ledgers, or exported mark files to the repository.**
 - `data/` is gitignored for exactly this reason — keep it that way.
-- The browser app (`kakeiboApp.js`) must never send parsed data anywhere; all
-  parsing/aggregation stays client-side (`fetch`/`XMLHttpRequest` calls are
-  not allowed in this module).
+- **Supabase off (default build):** no network calls; localStorage only.
+- **Supabase on (env configured):** ledger data syncs to Supabase Postgres
+  after Magic Link login. All access must go through **RLS policies** in
+  `supabase/migrations/` — never expose the service_role key in the frontend
+  or GitHub Actions build secrets (anon key only).
+- Cloud sync lives in `supabaseSync.js` / `transactionDb.js`; keep core
+  parse/aggregate modules network-free so they remain unit-testable in Node.
 - Tests and fixtures must use fabricated/anonymized data only, never real
   names, real account names, or real amounts from an actual export.
 - Do not log full transaction contents (merchant names, memos) to the
@@ -75,18 +82,26 @@ globs:
 
 ## UI
 
-- Keep the browser UI dependency-free (no frameworks) and served via Parcel
-  as a separate entry point (`kakeibo.html`), not merged into `index.html`.
+- Keep the browser UI served via Parcel as a separate entry point
+  (`kakeibo.html`), not merged into `index.html`. No React/Vue — plain JS.
+- `@supabase/supabase-js` is the only allowed runtime dependency for cloud sync.
 
 ## Deployment (GitHub Pages)
 
 - `.github/workflows/deploy-pages.yml` builds `index.html` and `kakeibo.html`
-  as a static site and deploys it to GitHub Pages on push to `main`. Since
-  this repo is public, the deployed site is publicly reachable with no
-  auth — that's acceptable *only* because the tool never sends parsed data
-  anywhere and starts empty until a user supplies their own CSV. Do not add
-  any server-side component, analytics, or third-party script to this tool
-  that would change that privacy story.
+  as a static site and deploys it to GitHub Pages on push to `main`.
+- Optional `SUPABASE_URL` / `SUPABASE_ANON_KEY` secrets are injected at build
+  time. When empty, the app runs in localStorage-only mode.
 - Keep the `--public-url` flag in the workflow in sync with the GitHub Pages
   project path (`/${{ github.event.repository.name }}/`) so built asset URLs
   resolve correctly under the project subpath.
+- Do not add analytics or unrelated third-party scripts.
+
+## Supabase
+
+- Schema and RLS live in `supabase/migrations/` — apply via Supabase SQL Editor
+  or CLI; document changes in `docs/supabase-setup.md`.
+- Pattern B (full ledger in DB): `transactions` table stores all fields +
+  mark + memo, keyed by `(household_id, moneyforward_id)`.
+- Single-user model today; `households` / `household_members` tables are
+  structured for future couple-sharing without breaking RLS.

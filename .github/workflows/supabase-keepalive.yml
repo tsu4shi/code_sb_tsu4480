@@ -1,0 +1,28 @@
+# Prevent Supabase Free-tier project pause (no DB activity for 7 days).
+# Requires SUPABASE_URL and SUPABASE_ANON_KEY repository secrets.
+# See docs/supabase-setup.md
+
+name: Supabase keepalive
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Every Monday 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "Supabase secrets not configured — skipping keepalive."
+            exit 0
+          fi
+          curl -sf \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            "${SUPABASE_URL}/rest/v1/households?select=id&limit=1"

@@ -14,6 +14,8 @@ import {
   MARK_KEYS,
   PERSON_LABELS_JA,
 } from "./aggregate.js";
+import { isSyncEnabled } from "./supabaseSync.js";
+import * as sync from "./supabaseSync.js";
 
 const MARKS_STORAGE_KEY = "kakeibo:marks:v1";
 const MEMO_OVERRIDES_STORAGE_KEY = "kakeibo:memoOverrides:v1";
@@ -27,9 +29,15 @@ const state = {
   marks: /** @type {Record<string, string>} */ ({}),
   memoOverrides: /** @type {Record<string, string>} */ ({}),
   filters: { month: "", person: "" },
+  auth: {
+    session: /** @type {object | null} */ (null),
+    householdId: /** @type {string | null} */ (null),
+    syncError: "",
+    syncing: false,
+  },
 };
 
-// ---------- persistence ----------
+// ---------- persistence (localStorage + optional Supabase) ----------
 
 function loadJson(key) {
   try {
@@ -44,7 +52,7 @@ function loadMarks() {
   return loadJson(MARKS_STORAGE_KEY);
 }
 
-function saveMarks() {
+function saveMarksLocal() {
   localStorage.setItem(MARKS_STORAGE_KEY, JSON.stringify(state.marks));
 }
 
@@ -52,8 +60,58 @@ function loadMemoOverrides() {
   return loadJson(MEMO_OVERRIDES_STORAGE_KEY);
 }
 
-function saveMemoOverrides() {
+function saveMemoOverridesLocal() {
   localStorage.setItem(MEMO_OVERRIDES_STORAGE_KEY, JSON.stringify(state.memoOverrides));
+}
+
+function isCloudSyncActive() {
+  return isSyncEnabled() && state.auth.session && state.auth.householdId;
+}
+
+function setSyncStatus(message, isError = false) {
+  state.auth.syncError = isError ? message : "";
+  const el = document.getElementById("sync-status");
+  if (!el) return;
+  el.textContent = message;
+  el.classList.toggle("error", isError);
+}
+
+async function syncLedgerToCloud() {
+  if (!isCloudSyncActive()) return;
+  state.auth.syncing = true;
+  setSyncStatus("クラウドに保存中...");
+  try {
+    await sync.upsertLedger(state.auth.householdId, state.transactions, state.marks);
+    setSyncStatus("クラウドに保存済み");
+  } catch (err) {
+    setSyncStatus(`クラウド保存エラー: ${err.message}`, true);
+    // eslint-disable-next-line no-console
+    console.error(err);
+  } finally {
+    state.auth.syncing = false;
+  }
+}
+
+async function persistMark(id, person) {
+  saveMarksLocal();
+  if (!isCloudSyncActive()) return;
+  try {
+    await sync.updateMark(state.auth.householdId, id, person || null);
+    setSyncStatus("クラウドに保存済み");
+  } catch (err) {
+    setSyncStatus(`マーク保存エラー: ${err.message}`, true);
+  }
+}
+
+async function persistMemo(id, text) {
+  saveMemoOverridesLocal();
+  if (!isCloudSyncActive()) return;
+  try {
+    await sync.updateMemo(state.auth.householdId, id, text);
+    setSyncStatus("クラウドに保存済み");
+  } catch (err) {
+    setSyncStatus(`メモ保存エラー: ${err.message}`, true);
+  }
 }
 
 function setMark(id, person) {
@@ -62,30 +120,148 @@ function setMark(id, person) {
   } else {
     delete state.marks[id];
   }
-  saveMarks();
+  persistMark(id, person);
   renderSummary();
-  // Re-sync the ledger table with the "負担者で絞り込み" filter (e.g. a row
-  // marked while filtered to "未設定" should drop out of that view).
   if (state.filters.person) {
     renderLedger();
   }
 }
 
-/** Edit a transaction's memo in place and persist it so it survives reloading the same source CSV later. */
 function setMemo(id, text) {
   const tx = state.transactionsById.get(id);
   if (tx) tx.memo = text;
   state.memoOverrides[id] = text;
-  saveMemoOverrides();
+  persistMemo(id, text);
+}
+
+function applyTransactionsToState(transactions) {
+  state.transactions = transactions;
+  state.transactionsById = new Map(transactions.map((tx) => [tx.id, tx]));
+  applyMemoOverrides(transactions, state.memoOverrides);
+}
+
+function revealDataPanels() {
+  document.getElementById("bulk-section").classList.remove("hidden");
+  document.getElementById("summary-section").classList.remove("hidden");
+  document.getElementById("ledger-section").classList.remove("hidden");
+}
+
+function refreshUiAfterDataChange() {
+  const months = [...new Set(state.transactions.map((t) => t.month))].sort();
+  populateInstitutionOptions();
+  populateContentOptions();
+  populateMonthFilter(months);
+  renderSummary();
+  renderLedger();
+  revealDataPanels();
+}
+
+// ---------- Supabase auth ----------
+
+function updateAuthUi() {
+  const panel = document.getElementById("auth-section");
+  const loggedOut = document.getElementById("auth-logged-out");
+  const loggedIn = document.getElementById("auth-logged-in");
+  const emailEl = document.getElementById("auth-email-display");
+
+  if (!isSyncEnabled()) {
+    panel.classList.add("hidden");
+    return;
+  }
+
+  panel.classList.remove("hidden");
+  const session = state.auth.session;
+
+  if (session) {
+    loggedOut.classList.add("hidden");
+    loggedIn.classList.remove("hidden");
+    emailEl.textContent = session.user.email || "";
+  } else {
+    loggedOut.classList.remove("hidden");
+    loggedIn.classList.add("hidden");
+  }
+}
+
+async function handleAuthSession(session) {
+  state.auth.session = session;
+  updateAuthUi();
+
+  if (!session) {
+    state.auth.householdId = null;
+    return;
+  }
+
+  try {
+    setSyncStatus("クラウドから読み込み中...");
+    state.auth.householdId = await sync.getHouseholdId();
+    if (!state.auth.householdId) {
+      setSyncStatus("household が見つかりません。Supabase のマイグレーションを確認してください。", true);
+      return;
+    }
+
+    const { transactions, marks } = await sync.fetchLedger(state.auth.householdId);
+    if (transactions.length > 0) {
+      Object.assign(state.marks, marks);
+      for (const tx of transactions) {
+        state.memoOverrides[tx.id] = tx.memo;
+      }
+      saveMarksLocal();
+      saveMemoOverridesLocal();
+      applyTransactionsToState(transactions);
+      refreshUiAfterDataChange();
+      setSyncStatus(`${transactions.length} 件をクラウドから読み込みました`);
+    } else {
+      setSyncStatus("ログイン済み — CSV を読み込むとクラウドに保存されます");
+    }
+  } catch (err) {
+    setSyncStatus(`クラウド読み込みエラー: ${err.message}`, true);
+    // eslint-disable-next-line no-console
+    console.error(err);
+  }
+}
+
+async function handleSignInSubmit(e) {
+  e.preventDefault();
+  const emailInput = document.getElementById("auth-email");
+  const statusEl = document.getElementById("auth-status");
+  const email = emailInput.value.trim();
+  if (!email) return;
+
+  statusEl.classList.remove("error");
+  statusEl.textContent = "ログインリンクを送信中...";
+  try {
+    await sync.signInWithEmail(email);
+    statusEl.textContent = `${email} にログインリンクを送信しました。メールのリンクを開いてください。`;
+  } catch (err) {
+    statusEl.textContent = `ログインエラー: ${err.message}`;
+    statusEl.classList.add("error");
+  }
+}
+
+async function handleSignOut() {
+  try {
+    await sync.signOut();
+    setSyncStatus("");
+  } catch (err) {
+    setSyncStatus(`ログアウトエラー: ${err.message}`, true);
+  }
+}
+
+function initAuth() {
+  if (!isSyncEnabled()) return;
+
+  document.getElementById("auth-form").addEventListener("submit", handleSignInSubmit);
+  document.getElementById("auth-signout").addEventListener("click", handleSignOut);
+
+  sync.onAuthStateChange((_event, session) => {
+    handleAuthSession(session);
+  });
+
+  sync.getSession().then((session) => handleAuthSession(session));
 }
 
 // ---------- CSV loading ----------
 
-/**
- * Detect whether a decoded CSV is a raw MoneyForward ME export or this
- * tool's own previously-exported ledger (which also carries marks and
- * memo edits), and parse it accordingly.
- */
 function parseAnyCsv(text, sourceLabel) {
   const [header] = parseCsvRows(text.replace(/^\uFEFF/, ""));
   if (isLedgerCsvHeader(header)) {
@@ -95,11 +271,6 @@ function parseAnyCsv(text, sourceLabel) {
   return { transactions: parseMoneyForwardCsv(text, sourceLabel), marks: {}, isLedger: false };
 }
 
-/**
- * Raw MoneyForward exports are Shift_JIS; this tool's own ledger CSV export
- * is UTF-8. Try UTF-8 first (strict) and fall back to Shift_JIS, so either
- * file type can be dropped into the same file picker.
- */
 function decodeCsvBuffer(buffer) {
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
@@ -120,7 +291,6 @@ async function readFile(file) {
 
 const CSV_EXTENSION = /\.csv$/i;
 
-/** Filter a FileList/array down to .csv files, ignoring anything else. */
 function filterCsvFiles(fileList) {
   return Array.from(fileList).filter((f) => CSV_EXTENSION.test(f.name));
 }
@@ -142,19 +312,17 @@ async function handleFiles(fileList) {
 
   try {
     const parsed = await Promise.all(files.map(readFile));
-    const { transactions, duplicateCount } = combineTransactions(parsed.map((p) => p.transactions));
-    state.transactions = transactions;
-    state.transactionsById = new Map(transactions.map((tx) => [tx.id, tx]));
 
-    // A fresh set of files is a new dataset; stale filters from a previous
-    // load (e.g. a month that no longer exists) would otherwise silently
-    // hide rows without the dropdowns reflecting it.
+    // When logged in, merge new CSV rows with existing cloud/local ledger.
+    const existingTxs = state.transactions.length > 0 ? state.transactions : [];
+    const allParsedTxs = parsed.flatMap((p) => p.transactions);
+    const { transactions, duplicateCount } = combineTransactions([...existingTxs, ...allParsedTxs]);
+
+    applyTransactionsToState(transactions);
+
     state.filters = { month: "", person: "" };
     document.getElementById("person-filter").value = "";
 
-    // Marks + memo edits embedded in a previously exported ledger CSV (if
-    // any) take precedence over locally cached values, restoring exactly
-    // what was exported without needing a separate JSON import.
     let restoredMarkCount = 0;
     let memoOverridesChanged = false;
     for (const { marks, transactions: srcTxs, isLedger } of parsed) {
@@ -169,13 +337,9 @@ async function handleFiles(fileList) {
         }
       }
     }
-    if (restoredMarkCount > 0) saveMarks();
-
-    // Apply persisted memo edits on top (covers both a raw MoneyForward
-    // reload restoring prior edits, and re-applying a ledger's own memos
-    // after combineTransactions/dedupe).
+    saveMarksLocal();
     applyMemoOverrides(transactions, state.memoOverrides);
-    if (memoOverridesChanged) saveMemoOverrides();
+    if (memoOverridesChanged) saveMemoOverridesLocal();
 
     const months = [...new Set(transactions.map((t) => t.month))].sort();
     statusEl.textContent = `${files.length}ファイルから${transactions.length}件の明細を読み込みました（対象月: ${months.join(", ")}${
@@ -184,15 +348,8 @@ async function handleFiles(fileList) {
       skipped ? ` / CSV以外の${skipped}件を無視` : ""
     }）`;
 
-    document.getElementById("bulk-section").classList.remove("hidden");
-    document.getElementById("summary-section").classList.remove("hidden");
-    document.getElementById("ledger-section").classList.remove("hidden");
-
-    populateInstitutionOptions();
-    populateContentOptions();
-    populateMonthFilter(months);
-    renderSummary();
-    renderLedger();
+    refreshUiAfterDataChange();
+    await syncLedgerToCloud();
   } catch (err) {
     statusEl.textContent = `読み込みエラー: ${err.message}`;
     statusEl.classList.add("error");
@@ -227,10 +384,6 @@ function populateContentOptions() {
     .join("");
 }
 
-/**
- * Apply `person` to every transaction whose `field` equals `value`.
- * Existing marks are left untouched unless `overwrite` is true.
- */
 function applyBulkMark(field, value, person, overwrite) {
   let applied = 0;
   for (const tx of state.transactions) {
@@ -239,9 +392,10 @@ function applyBulkMark(field, value, person, overwrite) {
     state.marks[tx.id] = person;
     applied++;
   }
-  saveMarks();
+  saveMarksLocal();
   renderSummary();
   renderLedger();
+  syncLedgerToCloud();
   return applied;
 }
 
@@ -329,10 +483,6 @@ function renderLedger() {
     .map((tx) => {
       const mark = state.marks[tx.id] || "";
       const eligible = isExpenseEligible(tx) && mark !== PERSON_EXCLUDED;
-      // Each badge's origin: 振替/対象外 come straight from MoneyForward's
-      // own CSV columns (振替, 計算対象); 収入 is this tool's own judgement
-      // from the amount's sign (MoneyForward has no dedicated column for
-      // it); 除外 is a mark you set yourself in this tool (負担者=除外).
       const badges = [
         tx.isTransfer ? '<span class="badge" title="MoneyForward Me側の「振替」列（口座間振替）">振替</span>' : "",
         !tx.isCalcTarget
@@ -350,9 +500,6 @@ function renderLedger() {
         .map((p) => `<option value="${p}" ${mark === p ? "selected" : ""}>${p ? PERSON_LABELS_JA[p] : "未設定"}</option>`)
         .join("");
 
-      // data-label mirrors the column header text; the mobile stylesheet
-      // uses it (via CSS attr()) to turn each cell into a "label: value"
-      // row when the table collapses into a card layout on narrow screens.
       return `
         <tr data-id="${escapeHtml(tx.id)}" class="${eligible ? "" : "excluded-row"}">
           <td data-label="日付">${tx.date}</td>
@@ -387,26 +534,15 @@ function renderLedger() {
   });
 
   container.querySelectorAll("tr[data-id] .memo-input").forEach((input) => {
-    // Keep the in-memory tx.memo in sync on every keystroke (cheap), not
-    // just on blur. Several other actions (bulk-mark apply, marking a row
-    // while a person filter is active, etc.) call renderLedger() and
-    // rebuild the whole table from state.transactions — without this, an
-    // in-progress, not-yet-blurred edit in one row would be silently
-    // discarded if the user triggers one of those from another row before
-    // tabbing away.
     input.addEventListener("input", (e) => {
       const tr = e.target.closest("tr");
       const tx = state.transactionsById.get(tr.dataset.id);
       if (tx) tx.memo = e.target.value;
     });
-    // Persisting to localStorage on every keystroke is unnecessary, so
-    // that only happens on "change" (fires on blur if the value changed).
     input.addEventListener("change", (e) => {
       const tr = e.target.closest("tr");
       setMemo(tr.dataset.id, e.target.value);
     });
-    // "change" only fires on blur; let Enter commit the edit immediately
-    // too, since this plain <input> isn't inside a <form>.
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") e.target.blur();
     });
@@ -435,11 +571,6 @@ function exportMarks() {
 
 const VALID_MARK_KEYS = new Set(MARK_KEYS);
 
-/**
- * Accepts either a JSON marks export or this tool's own ledger CSV. A
- * ledger CSV also carries memo edits, which are restored onto the
- * currently loaded transactions (matched by id) in the same step.
- */
 async function importMarksAndMemos(file) {
   const statusEl = document.getElementById("load-status");
 
@@ -457,20 +588,19 @@ async function importMarksAndMemos(file) {
         importedMemoCount++;
       }
       applyMemoOverrides(state.transactions, state.memoOverrides);
-      saveMemoOverrides();
+      saveMemoOverridesLocal();
     } else {
       const data = JSON.parse(text);
       incoming = data.marks || data;
     }
 
-    // Guard against malformed/unrelated JSON silently polluting state with
-    // junk keys — only accept known mark values.
     const validEntries = Object.entries(incoming).filter(([, person]) => VALID_MARK_KEYS.has(person));
 
     Object.assign(state.marks, Object.fromEntries(validEntries));
-    saveMarks();
+    saveMarksLocal();
     renderSummary();
     renderLedger();
+    await syncLedgerToCloud();
 
     statusEl.classList.remove("error");
     statusEl.textContent = `マークを ${validEntries.length} 件インポートしました${
@@ -492,8 +622,6 @@ function exportLedgerCsv() {
 
 function initDropzone() {
   const dropzone = document.getElementById("dropzone");
-  // The dropzone is a <label for="file-input">, so clicking it already
-  // opens the native file picker natively — no JS forwarding needed here.
 
   ["dragenter", "dragover"].forEach((eventName) => {
     dropzone.addEventListener(eventName, (e) => {
@@ -520,16 +648,24 @@ function initDropzone() {
     }
   });
 
-  // Prevent the browser from navigating to/opening the file if a drop
-  // lands outside the dropzone (the default behavior for the whole page).
   ["dragover", "drop"].forEach((eventName) => {
     window.addEventListener(eventName, (e) => e.preventDefault());
   });
 }
 
+function updatePrivacyNote() {
+  const note = document.getElementById("privacy-note");
+  if (isSyncEnabled()) {
+    note.textContent =
+      "※ Supabase 設定時: ログイン後は家計データがクラウド DB に保存され、端末間で同期されます。未設定時はブラウザ内（localStorage）のみで処理します。いずれも「全データCSV」でバックアップできます。";
+  }
+}
+
 function init() {
   state.marks = loadMarks();
   state.memoOverrides = loadMemoOverrides();
+  updatePrivacyNote();
+  initAuth();
 
   initDropzone();
   document.getElementById("file-input").addEventListener("change", (e) => {
@@ -569,12 +705,20 @@ function init() {
     e.target.value = "";
   });
   document.getElementById("export-ledger-csv").addEventListener("click", exportLedgerCsv);
-  document.getElementById("clear-marks").addEventListener("click", () => {
+  document.getElementById("clear-marks").addEventListener("click", async () => {
     if (confirm("すべてのマークを削除します。よろしいですか？")) {
       state.marks = {};
-      saveMarks();
+      saveMarksLocal();
       renderSummary();
       renderLedger();
+      if (isCloudSyncActive()) {
+        try {
+          await sync.clearAllMarks(state.auth.householdId);
+          setSyncStatus("クラウドのマークを消去しました");
+        } catch (err) {
+          setSyncStatus(`クラウド消去エラー: ${err.message}`, true);
+        }
+      }
     }
   });
 }

@@ -43,7 +43,7 @@ A separate **Node CLI** fetches US stock market news via the Finnhub API. It is 
 
 A separate **browser tool + Node CLI** for combining MoneyForward ME "収入・支出詳細" CSV exports into one ledger, letting the user manually mark each transaction as belonging to themselves/spouse/shared/excluded (excluded = money-movement-only transactions, e.g. a bank transfer, that should be dropped from all totals), and aggregating expenses by month and person. It is independent of the Parcel demo and the news tool.
 
-- Browser entry: `kakeibo.html` → `src/kakeibo/kakeiboApp.js` (run via `npm run kakeibo`, serves on port 1235). All CSV parsing/marking/aggregation happens client-side; nothing is sent to a server.
+- Browser entry: `kakeibo.html` → `src/kakeibo/kakeiboApp.js` (run via `npm run kakeibo`, serves on port 1235). CSV parsing/marking/aggregation happens client-side. Optional Supabase sync when `SUPABASE_URL` / `SUPABASE_ANON_KEY` are configured (see `docs/supabase-setup.md`); otherwise localStorage only.
 - Core modules (framework-agnostic, shared by browser + CLI): `src/kakeibo/csv.js`, `parseMoneyForwardCsv.js`, `combineTransactions.js`, `aggregate.js`, `ledgerCsv.js` (read/write the tool's own "全データCSV" export format, which round-trips both transactions and marks)
 - CLI entry point: `node tools/kakeibo/cli.js` (`combine` and `summarize` subcommands) for users who prefer a spreadsheet workflow
 - Human docs: `docs/kakeibo.md`

@@ -1,6 +1,6 @@
 # 家計簿集計ツール（MoneyForward ME）
 
-MoneyForward ME からエクスポートした「収入・支出詳細」CSVを読み込み、明細ごとに負担者（夫 / 妻 / 共通 / 除外）をマークして、月別の出費集計を作る個人利用ツールです。バックエンドやデータベースは使わず、ブラウザ内だけでデータを処理します（CSVはどこにも送信されません）。
+MoneyForward ME からエクスポートした「収入・支出詳細」CSVを読み込み、明細ごとに負担者（夫 / 妻 / 共通 / 除外）をマークして、月別の出費集計を作る個人利用ツールです。Supabase を設定するとクラウド DB と同期できます。未設定時はブラウザ内（localStorage）のみで処理します。
 
 **注意:** このツールは家計簿データの集計のみを行います。家計・投資アドバイスや将来予測は行いません。
 
@@ -33,7 +33,22 @@ npm run kakeibo
 
 ## マーク・メモの保存と引き継ぎ
 
-マークとメモの編集内容は、どちらもブラウザの localStorage に保存され、**同じブラウザで同じCSVを再度読み込めば**（MoneyForwardのIDをキーに）自動的に復元されます。別のブラウザ・別端末に引き継ぐ、またはバックアップを取る場合は次のいずれかの方法が使えます。
+### localStorage（Supabase 未設定時）
+
+マークとメモの編集内容は、どちらもブラウザの localStorage に保存され、**同じブラウザで同じCSVを再度読み込めば**（MoneyForwardのIDをキーに）自動的に復元されます。
+
+### Supabase クラウド同期（任意）
+
+`SUPABASE_URL` / `SUPABASE_ANON_KEY` を設定すると、**ログイン後に明細・マーク・メモが Supabase Postgres に保存**され、スマホ・PC 間で同期されます。セットアップ手順は [`docs/supabase-setup.md`](supabase-setup.md) を参照してください。
+
+- **初回**: CSV をインポート → クラウドに upsert
+- **2回目以降（ログイン済み）**: 起動時に DB から自動ロード（CSV 不要）
+- **新しい月の追加**: CSV を追加インポート → DB に upsert（ID で重複排除）
+- **未設定時**: 従来どおり localStorage のみ（クラウド送信なし）
+
+### ファイルによるバックアップ（常に利用可能）
+
+別のブラウザ・別端末への引き継ぎ、または DB のバックアップとして次の方法が使えます。
 
 - **「全データCSVをダウンロード」→ 次回そのCSVだけを読み込む** — 明細データ・マーク・編集後のメモ・IDがすべて1つのCSVに保存されるため、**元のMoneyForward CSVを再度エクスポートし直さなくても**、このCSVを「1. CSVを読み込む」の入力欄に選択するだけで一覧・マーク・メモ・集計表がすべて復元されます（新しい月の生CSVと一緒に選んでもOKです。IDで重複排除されます）。
 - **「マークをエクスポート」→「マーク・メモをインポート」** — マークだけをJSONファイルとして保存・復元する場合はこちら（メモの保存はJSON形式には含まれません。メモも一緒に保存したい場合は「全データCSVをダウンロード」を使ってください）。この場合は元のMoneyForward CSVを毎回読み込み直す必要があります。
@@ -48,12 +63,13 @@ npm run kakeibo
 1. GitHubのリポジトリ設定 → **Settings → Pages** を開く
 2. **Source** を **GitHub Actions** に設定する
 3. `main` ブランチにpushすると自動的にビルド・デプロイされます（`kakeibo.html` や `src/kakeibo/**` を変更した場合）。手動で実行したい場合は **Actions** タブから「Deploy to GitHub Pages」ワークフローを **Run workflow** で起動できます。
-4. デプロイ後は `https://<GitHubユーザー名>.github.io/<リポジトリ名>/kakeibo.html` でアクセスできます（例: `https://tsu4shi.github.io/code_sb_tsu4480/kakeibo.html`）。このURLをスマホのブラウザで開けばそのまま使えます。
+4. デプロイ後は `https://<GitHubユーザー名>.github.io/<リポジトリ名>/kakeibo.html` でアクセスできます（例: `https://yosio44.github.io/code_sb_tsu4480/kakeibo.html`）。このURLをスマホのブラウザで開けばそのまま使えます。
 
 **注意点:**
 
-- **このリポジトリはパブリック（公開）リポジトリのため、デプロイされたページも認証なしで誰でも開けます。** ただしCSVを自分でアップロードしない限り何のデータも表示されず、処理はすべてブラウザ内で完結し外部（サーバーを含む）へは一切送信されないため、あなたの家計簿データそのものが漏れることはありません。とはいえURLを知っていれば誰でもこのツール自体は開けてしまう点はご留意ください。より厳密にアクセス制限したい場合は、リポジトリをプライベートにした上でGitHub Pro/Team等のプライベートリポジトリ向けPages機能を使うか、Cloudflare Pages + Cloudflare Access のような認証つきの静的ホスティングサービスを検討してください。
-- ブラウザのlocalStorageはオリジン（ドメイン+パス）ごとに独立しているため、ローカルで `npm run kakeibo`（`http://localhost:1235`）を使ったときのマーク・メモと、GitHub Pages版（`https://.../kakeibo.html`）のマーク・メモは別々に保存されます。両方を行き来したい場合は「全データCSVをダウンロード」→ 別環境で読み込む、という形でデータを持ち運んでください。
+- **Supabase 未設定時**は、CSVを自分でアップロードしない限り何のデータも表示されず、処理はブラウザ内（localStorage）で完結します。
+- **Supabase 設定時**は、ログイン後に家計データがクラウド DB に保存されます。RLS（Row Level Security）により、ログインした本人のデータのみアクセス可能です。anon key は公開されますが、認証なしではデータは読めません。
+- ブラウザの localStorage と Supabase は別ストレージです。Supabase 利用時も「全データCSV」でバックアップできます。
 
 ## 使い方（CLI版・スプレッドシート派向け）
 
@@ -101,7 +117,8 @@ node tools/kakeibo/cli.js summarize --marks data/kakeibo-ledger.csv
 ## プライバシー
 
 - このリポジトリには実際の家計簿データ（CSV・エクスポート結果）を **絶対にコミットしないでください**。`data/` ディレクトリは `.gitignore` 済みです。
-- ブラウザ版はCSVをサーバーに送信せず、すべてクライアントサイド（JavaScript）で処理します。
+- **Supabase 未設定時**: CSV はサーバーに送信せず、localStorage のみで処理します。
+- **Supabase 設定時**: ログイン後、家計データは Supabase クラウド（Postgres）に保存されます。詳細は [`docs/supabase-setup.md`](supabase-setup.md) を参照してください。
 - CLI版は完全にローカルで完結し、外部通信は行いません。
 
 ## プロジェクト構成
@@ -114,8 +131,13 @@ src/kakeibo/
   aggregate.js               月別 x 負担者別の集計ロジック・負担者ラベル定義
   ledgerCsv.js               自前の「全データCSV」形式の書き出し/読み込み（マーク・メモ込み）
   memoOverrides.js           メモ編集内容を再読み込み時に復元するロジック
+  transactionDb.js           Supabase 行 ↔ アプリ内トランザクションの変換
+  supabaseConfig.js          Supabase URL / anon key（ビルド時注入）
+  supabaseSync.js            Supabase Auth + DB 同期
   kakeiboApp.js               ブラウザUI（file input, 一括マーク, メモ編集, 集計表表示）
   kakeiboStyles.css           ブラウザUIのスタイル
+supabase/migrations/         Supabase スキーマ + RLS（SQL）
+docs/supabase-setup.md       Supabase セットアップ手順
 tools/kakeibo/cli.js          CLI（combine / summarize サブコマンド）
 test/kakeibo/kakeibo.test.js  ユニットテスト（架空データのみ使用）
 kakeibo.html                  ブラウザUIのエントリーポイント
