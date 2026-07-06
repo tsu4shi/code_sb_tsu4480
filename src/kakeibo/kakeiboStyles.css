@@ -278,6 +278,8 @@ tr.excluded-row {
   max-height: 600px;
   overflow-y: auto;
   overflow-x: auto;
+  /* Smoother nested scrolling on desktop/tablet browsers that support it. */
+  -webkit-overflow-scrolling: touch;
 }
 
 #summary-table-container {
@@ -333,6 +335,15 @@ tr.excluded-row {
   .file-label {
     display: flex;
     flex-wrap: wrap;
+  }
+
+  /* Card layout scrolls with the page — a fixed-height inner scroll box
+     fights iOS Safari's touch handling (especially on small phones like
+     iPhone SE) and makes the ledger feel stuck until a form control is
+     tapped. Keep the nested scroll only on wider screens above. */
+  #ledger-table-container {
+    max-height: none;
+    overflow: visible;
   }
 
   /* iOS Safari auto-zooms the page when focusing a form control whose
