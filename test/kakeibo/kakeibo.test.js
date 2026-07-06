@@ -200,6 +200,7 @@ test("buildLedgerCsv + parseLedgerCsv round-trips transactions, marks, memo and 
 
   const csv = buildLedgerCsv(txs, marks);
   assert.ok(isLedgerCsvHeader(parseCsvRows(csv.replace(/^\uFEFF/, ""))[0]));
+  assert.ok(csv.includes('"夫"'), "ledger CSV should export the current 夫 label");
 
   const { transactions: restored, marks: restoredMarks } = parseLedgerCsv(csv);
   assert.equal(restored.length, 3);
@@ -220,6 +221,15 @@ test("buildLedgerCsv + parseLedgerCsv round-trips transactions, marks, memo and 
   assert.equal(restored[1].memo, "スーパーでまとめ買い（編集済み）");
 
   assert.deepEqual(restoredMarks, { "id-1": PERSON_ME, "id-2": PERSON_SPOUSE, "id-3": PERSON_EXCLUDED });
+});
+
+test("parseLedgerCsv accepts legacy 私 label as PERSON_ME", () => {
+  const txs = parseMoneyForwardCsv(
+    sampleCsv(['"1","2026/01/10","食費","-1000","太郎_カードA","食費","食料品","","0","id-1"'])
+  );
+  const csv = buildLedgerCsv(txs, { "id-1": PERSON_ME }).replace('"夫"', '"私"');
+  const { marks } = parseLedgerCsv(csv);
+  assert.deepEqual(marks, { "id-1": PERSON_ME });
 });
 
 test("isLedgerCsvHeader rejects a raw MoneyForward header", () => {

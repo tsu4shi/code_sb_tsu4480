@@ -31,7 +31,7 @@ Commands:
               a single UTF-8 CSV with an empty "負担者" column for marking.
   summarize   Read a marked ledger CSV (the output of "combine", or the
               browser app's "全データCSVをダウンロード", with "負担者" filled
-              in as 私/妻/共通/除外) and print a month x person expense summary
+              in as 夫/妻/共通/除外) and print a month x person expense summary
               as JSON. "除外" (e.g. an account transfer MoneyForward didn't
               flag as 振替) is dropped from all totals.
 
