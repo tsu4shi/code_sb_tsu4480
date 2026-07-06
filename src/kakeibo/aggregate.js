@@ -29,7 +29,7 @@ export const PERSON_LABELS_JA = {
 /** Reverse lookup: Japanese label -> mark value (accepts English keys too). */
 export const PERSON_LABEL_TO_KEY = {
   夫: PERSON_ME,
-  私: PERSON_ME,
+  私: PERSON_ME, // legacy label kept for re-importing older ledger CSVs
   妻: PERSON_SPOUSE,
   共通: PERSON_SHARED,
   除外: PERSON_EXCLUDED,
