@@ -24,16 +24,10 @@
       <section id="auth-section" class="panel hidden">
         <h2>クラウド同期（Supabase）</h2>
         <p class="hint">
-          メールでログインすると、明細・マーク・メモが端末間で同期されます。Supabase 未設定のビルドではこのセクションは表示されません。
+          Google アカウントでログインすると、明細・マーク・メモが端末間で同期されます。許可されたメールアドレス（夫・妻）のみログインできます。
         </p>
         <div id="auth-logged-out">
-          <form id="auth-form" class="auth-form">
-            <label
-              >メールアドレス:
-              <input type="email" id="auth-email" required placeholder="you@example.com" autocomplete="email" />
-            </label>
-            <button type="submit">ログインリンクを送信</button>
-          </form>
+          <button type="button" id="auth-google" class="auth-google-btn">Google でログイン</button>
         </div>
         <div id="auth-logged-in" class="hidden">
           <p>ログイン中: <strong id="auth-email-display"></strong></p>

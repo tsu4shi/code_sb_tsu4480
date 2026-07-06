@@ -48,6 +48,24 @@ export async function signInWithEmail(email) {
   if (error) throw error;
 }
 
+/** Sign in with Google OAuth (enable Google provider in Supabase Dashboard). */
+export async function signInWithGoogle() {
+  const { error } = await getSupabase().auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: window.location.href },
+  });
+  if (error) throw error;
+}
+
+/** @param {string} email */
+export async function isEmailAllowed(email) {
+  const { data, error } = await getSupabase().rpc("is_email_allowed", {
+    check_email: email,
+  });
+  if (error) throw error;
+  return Boolean(data);
+}
+
 export async function signOut() {
   const { error } = await getSupabase().auth.signOut();
   if (error) throw error;

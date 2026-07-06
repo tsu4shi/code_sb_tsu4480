@@ -2,13 +2,14 @@
 
 家計簿データを Supabase Postgres に保存し、スマホ・PC 間で同期するための手順です。**Supabase を設定しない場合は、従来どおり localStorage のみで動作します。**
 
-## 前提（検討プランで決めた方針）
+## 前提
 
 | 項目 | 方針 |
 |---|---|
 | DB 保存範囲 | **パターン B** — 明細・マーク・メモをすべて DB に保存 |
-| アクセス | **単独ユーザー**（ログインした本人のみ。`households` テーブルは将来の夫婦共有用に用意） |
-| 認証 | Email Magic Link（ワンタイムリンク） |
+| アクセス | **夫・妻の Google アカウントのみ**（`allowed_emails` テーブル） |
+| データ共有 | 2人目がログインすると **同じ household** に参加（同じ明細・マークを共有） |
+| 認証 | **Google OAuth** |
 | バックアップ | **全データ CSV エクスポートは引き続き利用可能** |
 
 ## 1. Supabase プロジェクト作成
@@ -19,32 +20,67 @@
 
 ## 2. スキーマ適用
 
-**SQL Editor** を開き、[`supabase/migrations/001_initial_schema.sql`](../supabase/migrations/001_initial_schema.sql) の内容をすべて貼り付けて **Run** します。
+**SQL Editor** で、次の順に **Run** します。
 
-これにより以下が作成されます：
+1. [`supabase/migrations/001_initial_schema.sql`](../supabase/migrations/001_initial_schema.sql)
+2. [`supabase/migrations/002_allowed_emails_google.sql`](../supabase/migrations/002_allowed_emails_google.sql)
 
-- `households` / `household_members` / `transactions` テーブル
-- 新規ユーザー登録時に household を自動作成するトリガー
-- Row Level Security（RLS）— ログインユーザーは自分の household のデータのみアクセス可能
+002 には **`tsu4480@gmail.com`（夫）** が最初から登録されています。
 
-## 3. Auth 設定
+### 妻の Gmail を追加する
 
-1. **Authentication → Providers → Email** を有効化
-2. **Confirm email** は ON 推奨（Magic Link 運用）
-3. **Authentication → URL Configuration** で Site URL に GitHub Pages の URL を設定  
-   例: `https://yosio44.github.io/code_sb_tsu4480/kakeibo.html`
-4. **Redirect URLs** に同じ URL（および `http://localhost:1235/kakeibo.html` 開発用）を追加
+妻の Google アカウントのメールアドレスが分かったら、SQL Editor で実行：
 
-## 4. API キー取得
+```sql
+insert into public.allowed_emails (email, note)
+values ('妻の@gmail.com', '妻');
+```
 
-**Project Settings → API** から以下を控えます：
+## 3. Google OAuth 設定
+
+### 3a. Google Cloud Console
+
+1. https://console.cloud.google.com/ → プロジェクト作成
+2. **APIs & Services → OAuth consent screen** — 外部、テストユーザーに夫・妻の Gmail を追加
+3. **Credentials → Create OAuth client ID** — 種類: **Web application**
+4. **Authorized JavaScript origins** に追加:
+   - `https://yosio44.github.io`（GitHub Pages）
+   - `http://localhost:1235`（ローカル開発）
+5. **Authorized redirect URIs** に Supabase の Callback URL を追加（次の 3b で確認）
+
+### 3b. Supabase Dashboard
+
+1. **Authentication → Providers → Google** を有効化
+2. Google の Client ID / Client Secret を貼り付け
+3. 表示される **Callback URL**（`https://xxxx.supabase.co/auth/v1/callback`）を Google Cloud の Redirect URIs に追加
+4. **Authentication → URL Configuration**
+   - **Site URL**: `https://yosio44.github.io/code_sb_tsu4480/kakeibo.html`
+   - **Redirect URLs**: 上記 + `http://localhost:1235/kakeibo.html`
+
+## 4. ログイン制限（Auth Hook・推奨）
+
+ブラウザ側のチェックに加え、**サインアップ前に拒否**する Auth Hook をデプロイします。
+
+```bash
+# Supabase CLI をインストール・ログイン後
+supabase link --project-ref <your-project-ref>
+supabase functions deploy before-user-created --no-verify-jwt
+```
+
+**Dashboard → Authentication → Hooks → Before user created** で `before-user-created` 関数を選択します。
+
+Hook 未設定でも、アプリ側で許可外メールは即ログアウトされます（Hook 設定を推奨）。
+
+## 5. API キー取得
+
+**Project Settings → API** から：
 
 - **Project URL** → `SUPABASE_URL`
 - **anon public** key → `SUPABASE_ANON_KEY`
 
-**service_role キーは絶対にフロントエンドや GitHub Secrets（ビルド注入）に使わないでください。**
+**service_role キーはフロントエンドや GitHub Secrets に入れないでください。**
 
-## 5. ローカル開発
+## 6. ローカル開発
 
 ```bash
 cp .env.example .env
@@ -53,41 +89,29 @@ npm install
 npm run kakeibo
 ```
 
-`.env` が空の場合は Supabase 未設定として localStorage モードで動作します。
+## 7. GitHub Pages デプロイ
 
-## 6. GitHub Pages デプロイ
-
-リポジトリ **Settings → Secrets and variables → Actions** に追加：
+**Settings → Secrets and variables → Actions**:
 
 | Secret 名 | 値 |
 |---|---|
 | `SUPABASE_URL` | Project URL |
 | `SUPABASE_ANON_KEY` | anon public key |
 
-`main` に push すると GitHub Actions がビルド時に環境変数を注入します。
+## 8. 7日 pause 対策（任意）
 
-## 7. 7日 pause 対策（任意）
+[`.github/workflows/supabase-keepalive.yml`](../.github/workflows/supabase-keepalive.yml) が週1 ping を送ります（Secrets 設定後に有効）。
 
-Free プランは **7日間 DB アクセスがないとプロジェクトが pause** します。週1回以上アプリを使えば問題ありません。自動化する場合は [`.github/workflows/supabase-keepalive.yml`](../.github/workflows/supabase-keepalive.yml) が週1 ping を送ります（Secrets 設定後に有効）。
+## ログインの流れ
 
-## プライバシー上の注意
+1. アプリで **Google でログイン**
+2. `allowed_emails` にメールがあるか確認（Hook + アプリ側）
+3. 初回ログイン（夫）→ 新しい household 作成
+4. 2人目（妻）がログイン → **同じ household** に `member` として参加
+5. 以降、どちらの端末からも同じ明細・マーク・メモが同期される
 
-Supabase 設定後は、家計データ（店名・金額・金融機関名・メモ）が **Supabase クラウド（Postgres）に保存**されます。GitHub Pages の URL は公開ですが、**ログイン + RLS** により他人があなたのデータを読むことはできません（anon key だけでは全データにはアクセス不可）。
+## プライバシー
 
-オフライン専用・クラウド非送信を維持したい場合は `.env` / GitHub Secrets を設定せず、従来の localStorage モードを使い続けてください。
+Supabase 設定後は家計データがクラウド DB に保存されます。**許可された Google アカウント以外はログインできません。**
 
-## データの流れ
-
-```mermaid
-flowchart LR
-  CSV[MoneyForward CSV] --> App[ブラウザアプリ]
-  App -->|ログイン時| DB[(Supabase)]
-  DB -->|起動時 fetch| App
-  App -->|mark/memo/CSV upsert| DB
-  App --> Export[全データCSV]
-```
-
-- **初回**: CSV インポート → DB に upsert
-- **2回目以降（ログイン済み）**: DB から自動ロード（CSV 不要）
-- **新しい月**: CSV を追加インポート → DB に upsert（ID で重複排除）
-- **バックアップ**: 「全データCSVをダウンロード」でいつでもエクスポート可能
+オフライン・非クラウド運用の場合は Secrets を設定せず localStorage モードのまま使えます。

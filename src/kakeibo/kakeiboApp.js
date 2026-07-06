@@ -191,11 +191,27 @@ async function handleAuthSession(session) {
     return;
   }
 
+  const statusEl = document.getElementById("auth-status");
+
   try {
+    const allowed = await sync.isEmailAllowed(session.user.email || "");
+    if (!allowed) {
+      await sync.signOut();
+      statusEl.textContent =
+        "この Google アカウントはログインできません。許可されたメールアドレス（夫・妻）のみ利用できます。";
+      statusEl.classList.add("error");
+      state.auth.session = null;
+      updateAuthUi();
+      return;
+    }
+
+    statusEl.classList.remove("error");
+    statusEl.textContent = "";
+
     setSyncStatus("クラウドから読み込み中...");
     state.auth.householdId = await sync.getHouseholdId();
     if (!state.auth.householdId) {
-      setSyncStatus("household が見つかりません。Supabase のマイグレーションを確認してください。", true);
+      setSyncStatus("household が見つかりません。Supabase のマイグレーション（002）を確認してください。", true);
       return;
     }
 
@@ -220,18 +236,12 @@ async function handleAuthSession(session) {
   }
 }
 
-async function handleSignInSubmit(e) {
-  e.preventDefault();
-  const emailInput = document.getElementById("auth-email");
+async function handleGoogleSignIn() {
   const statusEl = document.getElementById("auth-status");
-  const email = emailInput.value.trim();
-  if (!email) return;
-
   statusEl.classList.remove("error");
-  statusEl.textContent = "ログインリンクを送信中...";
+  statusEl.textContent = "Google ログイン画面へ移動します...";
   try {
-    await sync.signInWithEmail(email);
-    statusEl.textContent = `${email} にログインリンクを送信しました。メールのリンクを開いてください。`;
+    await sync.signInWithGoogle();
   } catch (err) {
     statusEl.textContent = `ログインエラー: ${err.message}`;
     statusEl.classList.add("error");
@@ -250,7 +260,7 @@ async function handleSignOut() {
 function initAuth() {
   if (!isSyncEnabled()) return;
 
-  document.getElementById("auth-form").addEventListener("submit", handleSignInSubmit);
+  document.getElementById("auth-google").addEventListener("click", handleGoogleSignIn);
   document.getElementById("auth-signout").addEventListener("click", handleSignOut);
 
   sync.onAuthStateChange((_event, session) => {
