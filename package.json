@@ -9,7 +9,7 @@
     "build": "parcel build index.html",
     "news": "node tools/us-market-news/cli.js",
     "quotes": "node tools/stock-quotes/cli.js",
-    "kakeibo": "parcel kakeibo.html --port 1235",
+    "kakeibo": "node tools/kakeibo/syncAuthConfig.js && parcel kakeibo.html --port 1235",
     "test": "node --test"
   },
   "dependencies": {

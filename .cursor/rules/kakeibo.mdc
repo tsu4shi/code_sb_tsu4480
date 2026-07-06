@@ -26,7 +26,8 @@ globs:
 - `data/` is gitignored for exactly this reason — keep it that way.
 - The browser app (`kakeiboApp.js`) must never send parsed data anywhere; all
   parsing/aggregation stays client-side (`fetch`/`XMLHttpRequest` calls are
-  not allowed in this module).
+  not allowed in this module). Google Sign-In (`auth.js`) is allowed only to
+  gate access — it must not upload CSV contents or ledger data.
 - Tests and fixtures must use fabricated/anonymized data only, never real
   names, real account names, or real amounts from an actual export.
 - Do not log full transaction contents (merchant names, memos) to the
@@ -81,12 +82,11 @@ globs:
 ## Deployment (GitHub Pages)
 
 - `.github/workflows/deploy-pages.yml` builds `index.html` and `kakeibo.html`
-  as a static site and deploys it to GitHub Pages on push to `main`. Since
-  this repo is public, the deployed site is publicly reachable with no
-  auth — that's acceptable *only* because the tool never sends parsed data
-  anywhere and starts empty until a user supplies their own CSV. Do not add
-  any server-side component, analytics, or third-party script to this tool
-  that would change that privacy story.
+  as a static site and deploys it to GitHub Pages on push to `main`. The
+  kakeibo page gates the tool UI behind Google Sign-In (allowlisted emails
+  only); inject `GOOGLE_CLIENT_ID` via `tools/kakeibo/syncAuthConfig.js` and
+  the `GOOGLE_CLIENT_ID` Actions secret. Do not add analytics or other
+  third-party scripts that would change the privacy story.
 - Keep the `--public-url` flag in the workflow in sync with the GitHub Pages
   project path (`/${{ github.event.repository.name }}/`) so built asset URLs
   resolve correctly under the project subpath.

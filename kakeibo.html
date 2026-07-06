@@ -16,11 +16,24 @@
           共通 / 除外）をマークして、月別の出費集計を作成します。「除外」は銀行振り込みなど口座間の資金移動だけで、集計対象にしたくない明細に使います。
         </p>
         <p class="privacy-note">
-          ※ このページはブラウザ内だけでCSVを処理します。データはどこにも送信されません。マーク結果はこの端末の
-          localStorage に保存されます。
+          ※ このページはブラウザ内だけでCSVを処理します。家計簿データは外部へ送信されません。マーク結果はこの端末の
+          localStorage に保存されます。ログインにはGoogleアカウントを使います（許可されたアカウントのみ）。
         </p>
+        <div id="auth-user" class="auth-user hidden">
+          <img id="auth-avatar" class="auth-avatar hidden" alt="" width="32" height="32" />
+          <span id="auth-email" class="auth-email"></span>
+          <button id="auth-signout" type="button">ログアウト</button>
+        </div>
       </header>
 
+      <section id="auth-section" class="panel">
+        <h2>ログイン</h2>
+        <p>許可されたGoogleアカウント（tsu4480@gmail.com / tomopri320@gmail.com）でのみ利用できます。</p>
+        <div id="google-signin-button"></div>
+        <div id="auth-error" class="status error hidden"></div>
+      </section>
+
+      <div id="app-content" class="hidden">
       <section id="load-section" class="panel">
         <h2>1. CSVを読み込む</h2>
         <p>
@@ -103,6 +116,7 @@
         </div>
         <div id="ledger-table-container"></div>
       </section>
+      </div>
     </div>
     <script src="src/kakeibo/kakeiboApp.js"></script>
   </body>

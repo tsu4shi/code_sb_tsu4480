@@ -1,3 +1,4 @@
+import { requireAuth } from "./auth.js";
 import { parseMoneyForwardCsv } from "./parseMoneyForwardCsv.js";
 import { parseCsvRows } from "./csv.js";
 import { combineTransactions } from "./combineTransactions.js";
@@ -527,7 +528,7 @@ function initDropzone() {
   });
 }
 
-function init() {
+function startApp() {
   state.marks = loadMarks();
   state.memoOverrides = loadMemoOverrides();
 
@@ -579,4 +580,11 @@ function init() {
   });
 }
 
-document.addEventListener("DOMContentLoaded", init);
+document.addEventListener("DOMContentLoaded", () => {
+  requireAuth()
+    .then(() => startApp())
+    .catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error(err);
+    });
+});
