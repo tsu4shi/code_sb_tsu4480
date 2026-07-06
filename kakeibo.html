@@ -12,7 +12,7 @@
       <header>
         <h1>家計簿 集計ツール</h1>
         <p class="subtitle">
-          MoneyForward ME からエクスポートした「収入・支出詳細」CSVを読み込み、明細ごとに負担者（私 / 妻 /
+          MoneyForward ME からエクスポートした「収入・支出詳細」CSVを読み込み、明細ごとに負担者（夫 / 妻 /
           共通 / 除外）をマークして、月別の出費集計を作成します。「除外」は銀行振り込みなど口座間の資金移動だけで、集計対象にしたくない明細に使います。
         </p>
         <p class="privacy-note">
@@ -45,7 +45,7 @@
           <select id="bulk-institution"></select>
           <select id="bulk-person">
             <option value="">-- 負担者を選択 --</option>
-            <option value="me">私</option>
+            <option value="me">夫</option>
             <option value="spouse">妻</option>
             <option value="shared">共通</option>
             <option value="excluded">除外</option>
@@ -58,7 +58,7 @@
           <select id="bulk-content"></select>
           <select id="bulk-content-person">
             <option value="">-- 負担者を選択 --</option>
-            <option value="me">私</option>
+            <option value="me">夫</option>
             <option value="spouse">妻</option>
             <option value="shared">共通</option>
             <option value="excluded">除外</option>
@@ -87,7 +87,7 @@
             <select id="person-filter">
               <option value="">すべて</option>
               <option value="unset">未設定</option>
-              <option value="me">私</option>
+              <option value="me">夫</option>
               <option value="spouse">妻</option>
               <option value="shared">共通</option>
               <option value="excluded">除外</option>
