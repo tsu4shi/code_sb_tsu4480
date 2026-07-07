@@ -27,6 +27,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Sync Google OAuth client ID for kakeibo login
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+        run: node tools/kakeibo/syncAuthConfig.js
+
       - name: Build static site (Parcel demo + kakeibo tool)
         # Both entries are 100% client-side (no backend); the base path
         # matches this repo's GitHub Pages project URL.
