@@ -48,7 +48,8 @@ function updateUserBar(session) {
   const userBar = document.getElementById("auth-user");
   const emailEl = document.getElementById("auth-email");
   const avatarEl = document.getElementById("auth-avatar");
-  if (!userBar || !emailEl || !avatarEl) return;
+  const signOutBtn = document.getElementById("auth-signout");
+  if (!userBar || !emailEl || !avatarEl || !signOutBtn) return;
 
   if (session) {
     emailEl.textContent = session.email;
@@ -62,12 +63,14 @@ function updateUserBar(session) {
       avatarEl.classList.add("hidden");
     }
     userBar.classList.remove("hidden");
+    signOutBtn.classList.remove("hidden");
   } else {
     emailEl.textContent = "";
     avatarEl.removeAttribute("src");
     avatarEl.alt = "";
     avatarEl.classList.add("hidden");
     userBar.classList.add("hidden");
+    signOutBtn.classList.add("hidden");
   }
 }
 
