@@ -71,6 +71,10 @@ header h1 {
   display: none;
 }
 
+.auth-user.hidden {
+  display: none;
+}
+
 .auth-user {
   display: flex;
   align-items: center;

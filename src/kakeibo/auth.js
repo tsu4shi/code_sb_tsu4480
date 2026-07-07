@@ -39,17 +39,17 @@ function setAuthError(message) {
   }
 }
 
-function setAppVisible(visible) {
-  document.getElementById("auth-section")?.classList.toggle("hidden", visible);
-  document.getElementById("app-content")?.classList.toggle("hidden", !visible);
+/** @param {boolean} isAuthenticated */
+function setAuthenticated(isAuthenticated) {
+  document.getElementById("auth-section")?.classList.toggle("hidden", isAuthenticated);
+  document.getElementById("app-content")?.classList.toggle("hidden", !isAuthenticated);
 }
 
 function updateUserBar(session) {
   const userBar = document.getElementById("auth-user");
   const emailEl = document.getElementById("auth-email");
   const avatarEl = document.getElementById("auth-avatar");
-  const signOutBtn = document.getElementById("auth-signout");
-  if (!userBar || !emailEl || !avatarEl || !signOutBtn) return;
+  if (!userBar || !emailEl || !avatarEl) return;
 
   if (session) {
     emailEl.textContent = session.email;
@@ -63,14 +63,12 @@ function updateUserBar(session) {
       avatarEl.classList.add("hidden");
     }
     userBar.classList.remove("hidden");
-    signOutBtn.classList.remove("hidden");
   } else {
     emailEl.textContent = "";
     avatarEl.removeAttribute("src");
     avatarEl.alt = "";
     avatarEl.classList.add("hidden");
     userBar.classList.add("hidden");
-    signOutBtn.classList.add("hidden");
   }
 }
 
@@ -78,7 +76,7 @@ function handleSignedIn(session) {
   setAuthError("");
   storeSession(session);
   updateUserBar(session);
-  setAppVisible(true);
+  setAuthenticated(true);
   onSignedIn?.(session);
 }
 
@@ -88,8 +86,9 @@ function handleCredentialResponse(response) {
     handleSignedIn(session);
   } catch (err) {
     setAuthError(err.message);
-    setAppVisible(false);
+    setAuthenticated(false);
     updateUserBar(null);
+    showSignInButton();
   }
 }
 
@@ -142,15 +141,31 @@ function renderGoogleButton() {
   });
 }
 
+function showSignInButton() {
+  return loadGoogleScript()
+    .then(() => {
+      // Render after the login panel is visible again (e.g. right after sign-out).
+      requestAnimationFrame(() => renderGoogleButton());
+    })
+    .catch((err) => {
+      setAuthError(err.message);
+      throw err;
+    });
+}
+
 function signOut() {
   clearSession();
   updateUserBar(null);
-  setAppVisible(false);
+  setAuthenticated(false);
   setAuthError("");
   if (window.google?.accounts?.id) {
     window.google.accounts.id.disableAutoSelect();
   }
-  renderGoogleButton();
+  showSignInButton();
+}
+
+function wireSignOut() {
+  document.getElementById("auth-signout")?.addEventListener("click", signOut);
 }
 
 /**
@@ -160,18 +175,19 @@ function signOut() {
 export function requireAuth() {
   return new Promise((resolve, reject) => {
     onSignedIn = resolve;
+    wireSignOut();
 
     const existing = getStoredSession();
     if (isSessionValid(existing)) {
-      document.getElementById("auth-signout")?.addEventListener("click", signOut);
       updateUserBar(existing);
-      setAppVisible(true);
+      setAuthenticated(true);
       resolve(existing);
       return;
     }
+
     clearSession();
     updateUserBar(null);
-    setAppVisible(false);
+    setAuthenticated(false);
 
     if (!GOOGLE_CLIENT_ID) {
       const message =
@@ -181,15 +197,6 @@ export function requireAuth() {
       return;
     }
 
-    document.getElementById("auth-signout")?.addEventListener("click", signOut);
-
-    loadGoogleScript()
-      .then(() => {
-        renderGoogleButton();
-      })
-      .catch((err) => {
-        setAuthError(err.message);
-        reject(err);
-      });
+    showSignInButton().catch((err) => reject(err));
   });
 }
