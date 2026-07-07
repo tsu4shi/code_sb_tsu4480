@@ -59,6 +59,10 @@ header h1 {
   margin-bottom: 20px;
 }
 
+.hidden {
+  display: none;
+}
+
 .panel.hidden {
   display: none;
 }
