@@ -59,6 +59,18 @@ See [`docs/kakeibo.md`](docs/kakeibo.md) for full usage (including the CLI) and 
 
 This tool is 100% client-side, so it can also be hosted as a static site and used from a phone browser via GitHub Pages (`.github/workflows/deploy-pages.yml`, requires a one-time `Settings → Pages → Source = GitHub Actions` setup) — see [`docs/kakeibo.md`](docs/kakeibo.md) for details. Note the deployed page is publicly reachable (no login) since this repo is public.
 
+## Receipts OCR tool
+
+Batch-load receipt images, OCR them with Google Cloud Vision (user-provided API key stored in browser `localStorage`), edit line items in a table, and download CSV. Matching against the kakeibo ledger is planned for a later version.
+
+```bash
+npm install
+npm run receipts
+# open http://localhost:1236/receipts.html
+```
+
+See [`docs/receipts.md`](docs/receipts.md). Never commit real receipt images or exported receipt CSVs.
+
 ## Parcel demo (legacy sandbox)
 
 ```bash

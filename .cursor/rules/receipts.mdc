@@ -1,0 +1,54 @@
+---
+description: Rules for developing the receipt OCR import tool (Google Vision)
+globs:
+  - src/receipts/**
+  - test/receipts/**
+  - docs/receipts.md
+  - receipts.html
+---
+
+# Receipts OCR Tool — Development Rules
+
+## Scope
+
+- Build and maintain **receipt image → OCR → editable table → CSV export** only.
+- Do not add kakeibo reconciliation/matching UI until explicitly requested.
+- Keep independent from the Parcel demo (`src/index3.js`) and `src/news/**`.
+- Reuse kakeibo Google Sign-In (`src/kakeibo/auth.js`) for access gating; do not
+  upload receipt tables to Google as part of login.
+
+## Privacy (critical)
+
+- Receipt images are sent to **Google Cloud Vision** for OCR — this is intentional
+  and must stay clearly disclosed in the UI and docs.
+- **Never commit** real receipt images, OCR dumps, or exported receipt CSVs.
+- The Vision API key must **never** be hardcoded or committed. Users enter it in
+  the UI; store only in `localStorage` (`receipts:visionApiKey:v1`).
+- Do not log API keys or full OCR text in production UI paths; status messages
+  should use file counts / error codes.
+
+## Free-tier guardrails
+
+- Default monthly cap is `FREE_TIER_MONTHLY_LIMIT` (1000) in `config.js`.
+- Always check `planBatch` / remaining quota **before** calling Vision.
+- Increment usage only after a successful Vision response.
+- Document that users should also set a GCP quota ceiling.
+
+## Data model
+
+- Core parsing/CSV helpers (`parseReceiptText.js`, `receiptCsv.js`, `quota.js`,
+  `config.js`, `errors.js`) must stay framework-agnostic plain JS (no DOM) so
+  unit tests can run under `node --test`.
+- v1 granularity is **one CSV row per line item** (not one row per receipt).
+- `receiptId` groups lines from the same image; preserve it on export.
+- CSV columns live in `RECEIPT_CSV_HEADER` — keep export and docs in sync.
+
+## Testing
+
+- Add/keep unit tests in `test/receipts/` for parsers, CSV, and quota math.
+- Use fabricated OCR text only — never real merchant receipts as fixtures.
+
+## UI
+
+- Separate Parcel entry: `receipts.html` → `src/receipts/receiptsApp.js`.
+- Dependency-free browser UI (no frameworks), same visual language as kakeibo.

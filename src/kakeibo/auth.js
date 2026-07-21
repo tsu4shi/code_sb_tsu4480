@@ -191,7 +191,7 @@ export function requireAuth() {
 
     if (!GOOGLE_CLIENT_ID) {
       const message =
-        "Googleログインが設定されていません。GOOGLE_CLIENT_ID を .env に設定し、npm run kakeibo を再実行してください。";
+        "Googleログインが設定されていません。GOOGLE_CLIENT_ID を .env に設定し、npm run kakeibo または npm run receipts を再実行してください。";
       setAuthError(message);
       reject(new Error(message));
       return;

@@ -60,3 +60,32 @@ A separate **browser tool + Node CLI** for combining MoneyForward ME "収入・�
 
 - Combine, mark, and aggregate expenses only — no budgeting advice, spending predictions, or investment logic
 - Keep separate from `src/index3.js` and `src/news/**` unless explicitly requested otherwise
+
+## Receipts OCR tool
+
+A separate **browser tool** that batch-loads receipt images, runs Google Cloud Vision OCR, shows editable line-item rows, and exports CSV. Independent of the Parcel demo, news tool, and (for now) kakeibo reconciliation.
+
+- Browser entry: `receipts.html` → `src/receipts/receiptsApp.js` (run via `npm run receipts`, port **1236**)
+- Core modules: `src/receipts/parseReceiptText.js`, `visionClient.js`, `receiptCsv.js`, `quota.js`, `apiKeyStore.js`, `config.js`, `errors.js`
+- Reuses kakeibo Google Sign-In (`src/kakeibo/auth.js` + `syncAuthConfig.js`)
+- Human docs: `docs/receipts.md`
+- Agent rules: `.cursor/rules/receipts.mdc`
+- Tests: `test/receipts/receipts.test.js` (`npm test`)
+
+### Environment / secrets
+
+1. `GOOGLE_CLIENT_ID` in `.env` (same as kakeibo) for login
+2. Vision API key is entered in the UI and stored in **browser localStorage only** — never commit it, never put it in `.env` for this static-site design
+3. Recommend HTTP referrer restrictions on the key and a GCP monthly quota ceiling of 1000
+
+### Verification
+
+- Unit tests cover parsing / CSV / quota math
+- Manual: `npm run receipts` → save a Vision key → drop sample images → confirm table + CSV download
+- Without a key, expect a clear config error; when monthly counter is exhausted, expect a quota stop (no Vision call)
+
+### Scope limits
+
+- OCR → table → CSV only in v1 — no kakeibo matching until requested
+- Do not modify `src/index3.js` or `src/news/**` for receipts features unless explicitly requested
+- Never commit real receipt images or exported receipt CSVs
