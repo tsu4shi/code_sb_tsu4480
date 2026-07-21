@@ -1,8 +1,17 @@
-import { parseAmount } from "./parseReceiptText.js";
+import {
+  extractDate,
+  extractPaymentMethod,
+  extractStoreName,
+  extractTotal,
+  isCompleteDate,
+  parseAmount,
+  parseReceiptText,
+} from "./parseReceiptText.js";
 
 /**
  * Map Document AI Expense Parser document.entities → receipt line-item rows.
- * Framework-agnostic plain JS for node --test.
+ * When entity extraction is weak (common on JP thermal receipts), fall back to
+ * heuristic parsing of document.text while keeping strong header fields.
  */
 
 /**
@@ -17,6 +26,10 @@ function entityText(entity) {
   if (entity?.mentionText != null && String(entity.mentionText).trim()) {
     return String(entity.mentionText).trim();
   }
+  // Some clients serialize snake_case.
+  if (entity?.mention_text != null && String(entity.mention_text).trim()) {
+    return String(entity.mention_text).trim();
+  }
   return "";
 }
 
@@ -27,11 +40,12 @@ function entityText(entity) {
  */
 function entityDate(entity) {
   if (!entity) return "";
-  const nv = entity.normalizedValue;
-  if (nv?.dateValue?.year && nv?.dateValue?.month && nv?.dateValue?.day) {
-    const y = nv.dateValue.year;
-    const m = String(nv.dateValue.month).padStart(2, "0");
-    const d = String(nv.dateValue.day).padStart(2, "0");
+  const nv = entity.normalizedValue || entity.normalized_value;
+  const dateValue = nv?.dateValue || nv?.date_value;
+  if (dateValue?.year && dateValue?.month && dateValue?.day) {
+    const y = dateValue.year;
+    const m = String(dateValue.month).padStart(2, "0");
+    const d = String(dateValue.day).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }
   const text = entityText(entity);
@@ -41,7 +55,9 @@ function entityDate(entity) {
   if (jp) {
     return `${jp[1]}-${String(jp[2]).padStart(2, "0")}-${String(jp[3]).padStart(2, "0")}`;
   }
-  return text;
+  // Year-only / incomplete → empty so callers can fall back to full OCR text.
+  if (/^\d{4}$/.test(text)) return "";
+  return isCompleteDate(text) ? text : "";
 }
 
 /**
@@ -50,21 +66,21 @@ function entityDate(entity) {
  */
 function entityAmount(entity) {
   if (!entity) return null;
-  const money = entity.normalizedValue?.moneyValue;
+  const nv = entity.normalizedValue || entity.normalized_value;
+  const money = nv?.moneyValue || nv?.money_value;
   if (money && money.units != null) {
     const units = Number(money.units);
     const nanos = Number(money.nanos) || 0;
     if (Number.isFinite(units)) {
       const value = units + nanos / 1e9;
-      // Yen receipts are whole yen; avoid floating noise like 198.000000001.
-      const currency = String(money.currencyCode || "").toUpperCase();
+      const currency = String(money.currencyCode || money.currency_code || "").toUpperCase();
       if (currency === "JPY" || currency === "") {
         return Math.round(value);
       }
       return value;
     }
   }
-  const floatVal = entity.normalizedValue?.floatValue;
+  const floatVal = nv?.floatValue ?? nv?.float_value;
   if (floatVal != null && Number.isFinite(Number(floatVal))) {
     return Number(floatVal);
   }
@@ -77,7 +93,7 @@ function entityAmount(entity) {
  * @returns {object|undefined}
  */
 function findEntity(entities, type) {
-  return entities.find((e) => e?.type === type);
+  return entities.find((e) => e?.type === type || e?.type_ === type);
 }
 
 /**
@@ -92,9 +108,7 @@ function parseLineItemProperties(lineItemEntity) {
   let unitPrice = "";
 
   for (const prop of props) {
-    // Match exact property types only — `endsWith("/amount")` wrongly matches
-    // `line_item/payment_amount`.
-    const type = String(prop?.type || "");
+    const type = String(prop?.type || prop?.type_ || "");
     if (type === "line_item/description") {
       description = entityText(prop) || description;
     } else if (type === "line_item/amount") {
@@ -110,8 +124,25 @@ function parseLineItemProperties(lineItemEntity) {
   if (!description) {
     description = entityText(lineItemEntity);
   }
+  description = description.replace(/^[0-9０-９]{2,6}\s+/, "").trim();
 
   return { description, amount, quantity, unitPrice };
+}
+
+/**
+ * @param {{ description: string, amount: number|null }} line
+ * @returns {boolean}
+ */
+export function isUsefulLineItem(line) {
+  const name = String(line?.description || "").trim();
+  if (!name) return false;
+  // Reject pure numbers / tiny OCR junk like "35" or "ひんだーつ" without amount.
+  if (/^[0-9０-９¥￥,，.\s]+$/.test(name)) return false;
+  if (name.length <= 1) return false;
+  if (line.amount == null && name.length < 4) return false;
+  // Reject payment / tax labels mistaken as items.
+  if (/^(合計|小計|税|クレジット|現金|PayPay)/i.test(name)) return false;
+  return true;
 }
 
 /**
@@ -135,16 +166,6 @@ export function normalizePaymentType(raw) {
  * @param {object} [meta]
  * @param {string} [meta.sourceFile]
  * @param {string} [meta.receiptId]
- * @returns {{
- *   receiptId: string,
- *   date: string,
- *   storeName: string,
- *   paymentMethod: string,
- *   total: number|null,
- *   rawText: string,
- *   sourceFile: string,
- *   items: Array<object>
- * }}
  */
 export function parseExpenseDocument(document, meta = {}) {
   const entities = Array.isArray(document?.entities) ? document.entities : [];
@@ -152,21 +173,63 @@ export function parseExpenseDocument(document, meta = {}) {
   const receiptId =
     meta.receiptId ||
     `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-  const storeName = entityText(findEntity(entities, "supplier_name"));
-  const date = entityDate(findEntity(entities, "receipt_date"));
-  const paymentMethod = normalizePaymentType(entityText(findEntity(entities, "payment_type")));
-  const total = entityAmount(findEntity(entities, "total_amount"));
   const rawText = String(document?.text || "");
 
-  const lineEntities = entities.filter((e) => e?.type === "line_item");
-  /** @type {Array<{ description: string, amount: number|null, quantity: string, unitPrice: string }>} */
-  const parsedLines = lineEntities.map(parseLineItemProperties).filter((line) => {
-    return Boolean(line.description || line.amount != null);
-  });
+  const entityStore = entityText(findEntity(entities, "supplier_name"));
+  const entityDateValue = entityDate(findEntity(entities, "receipt_date"));
+  const entityPayment = normalizePaymentType(entityText(findEntity(entities, "payment_type")));
+  const entityTotal = entityAmount(findEntity(entities, "total_amount"));
 
+  const textDate = extractDate(rawText);
+  const textStore = extractStoreName(rawText);
+  const textPayment = extractPaymentMethod(rawText);
+  const textTotal = extractTotal(rawText);
+
+  const date = isCompleteDate(entityDateValue) ? entityDateValue : textDate || entityDateValue;
+  const storeName = entityStore || textStore;
+  const paymentMethod = entityPayment || textPayment;
+  const total = entityTotal != null ? entityTotal : textTotal;
+
+  const lineEntities = entities.filter((e) => e?.type === "line_item" || e?.type_ === "line_item");
+  const entityLines = lineEntities.map(parseLineItemProperties).filter(isUsefulLineItem);
+
+  // Prefer OCR-text line items when Expense Parser line items look weak/wrong.
+  const textParsed = parseReceiptText(rawText, {
+    sourceFile,
+    receiptId,
+    date,
+    storeName,
+    paymentMethod,
+    total,
+  });
+  const textHasRealItems = textParsed.items.some(
+    (row) => row.itemName && !/（合計）$/.test(row.itemName) && row.amount != null
+  );
+  const entityLooksWeak =
+    entityLines.length === 0 ||
+    entityLines.every((line) => line.amount == null) ||
+    entityLines.some((line) => /^[0-9０-９]+$/.test(line.description));
+
+  /** @type {Array<object>} */
   let items;
-  if (parsedLines.length === 0) {
+  if (textHasRealItems && (entityLooksWeak || entityLines.length < textParsed.items.filter((r) => r.amount != null).length)) {
+    items = textParsed.items;
+  } else if (entityLines.length > 0) {
+    items = entityLines.map((line, i) => ({
+      id: `${receiptId}_${i}`,
+      receiptId,
+      date,
+      storeName,
+      itemName: line.description || "（品目）",
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      amount: line.amount,
+      paymentMethod,
+      taxNote: "",
+      memo: "",
+      sourceFile,
+    }));
+  } else {
     items = [
       {
         id: `${receiptId}_0`,
@@ -183,22 +246,16 @@ export function parseExpenseDocument(document, meta = {}) {
         sourceFile,
       },
     ];
-  } else {
-    items = parsedLines.map((line, i) => ({
-      id: `${receiptId}_${i}`,
-      receiptId,
-      date,
-      storeName,
-      itemName: line.description || "（品目）",
-      quantity: line.quantity,
-      unitPrice: line.unitPrice,
-      amount: line.amount,
-      paymentMethod,
-      taxNote: "",
-      memo: "",
-      sourceFile,
-    }));
   }
+
+  // Ensure header fields propagate even if text parser built the rows earlier
+  // with incomplete entity headers.
+  items = items.map((row) => ({
+    ...row,
+    date: date || row.date,
+    storeName: storeName || row.storeName,
+    paymentMethod: paymentMethod || row.paymentMethod,
+  }));
 
   return {
     receiptId,
