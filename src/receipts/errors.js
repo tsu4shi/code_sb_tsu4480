@@ -26,14 +26,27 @@ export class QuotaError extends ReceiptsError {
   }
 }
 
-export class VisionApiError extends ReceiptsError {
+export class DocumentAiError extends ReceiptsError {
   /**
    * @param {string} message
    * @param {number} [status]
    */
   constructor(message, status = 0) {
-    super(message, "VISION_API_ERROR");
-    this.name = "VisionApiError";
+    super(message, "DOCUMENT_AI_ERROR");
+    this.name = "DocumentAiError";
     this.status = status;
+  }
+}
+
+/** @deprecated Use DocumentAiError */
+export class VisionApiError extends DocumentAiError {
+  /**
+   * @param {string} message
+   * @param {number} [status]
+   */
+  constructor(message, status = 0) {
+    super(message, status);
+    this.name = "VisionApiError";
+    this.code = "VISION_API_ERROR";
   }
 }

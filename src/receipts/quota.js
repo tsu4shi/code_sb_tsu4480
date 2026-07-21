@@ -1,4 +1,4 @@
-import { FREE_TIER_MONTHLY_LIMIT, QUOTA_STORAGE_KEY } from "./config.js";
+import { MONTHLY_SOFT_LIMIT, QUOTA_STORAGE_KEY } from "./config.js";
 
 /**
  * @returns {string} Current UTC month key `YYYY-MM`.
@@ -51,7 +51,7 @@ export function recordUsage(delta = 1) {
  */
 export function getQuotaStatus() {
   const { month, used } = readQuota();
-  const limit = FREE_TIER_MONTHLY_LIMIT;
+  const limit = MONTHLY_SOFT_LIMIT;
   return {
     month,
     used,

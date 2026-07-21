@@ -61,7 +61,7 @@ This tool is 100% client-side, so it can also be hosted as a static site and use
 
 ## Receipts OCR tool
 
-Batch-load receipt images, OCR them with Google Cloud Vision (user-provided API key stored in browser `localStorage`), edit line items in a table, and download CSV. Matching against the kakeibo ledger is planned for a later version.
+Batch-load receipt images, OCR them with Google Cloud Document AI Expense Parser (OAuth access token in memory only — no API key stored), edit line items in a table, and download CSV. Matching against the kakeibo ledger is planned for a later version.
 
 ```bash
 npm install

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>レシート読み込み（Google Vision OCR）</title>
+    <title>レシート読み込み（Document AI）</title>
     <link rel="stylesheet" href="src/receipts/receiptsStyles.css" />
   </head>
 
@@ -12,13 +12,13 @@
       <header>
         <h1>レシート読み込み</h1>
         <p class="subtitle">
-          レシート画像をまとめて読み込み、Google Cloud Vision
-          OCRで明細行の表にします。結果は画面で確認・編集でき、CSVとしてダウンロードできます（家計簿ツールとの突合は次バージョン予定）。
+          レシート画像をまとめて読み込み、Google Cloud Document AI（Expense
+          Parser）で明細行の表にします。結果は画面で確認・編集でき、CSVとしてダウンロードできます（家計簿ツールとの突合は次バージョン予定）。
         </p>
         <p class="privacy-note">
-          ※ レシート画像はOCRのため Google Cloud Vision API
-          に送信されます。APIキーはこの端末の localStorage
-          にだけ保存され、リポジトリやサーバーには置きません。ログインは家計簿ツールと同じGoogleアカウント許可リストです。
+          ※ レシート画像は OCR のため Google Cloud Document AI
+          に送信されます。サービスアカウント鍵や APIキーはこの端末に保存しません。Document AI
+          呼び出しには短命の OAuth アクセストークン（メモリのみ）を使います。ログインは家計簿ツールと同じGoogleアカウント許可リストです。
         </p>
         <div id="auth-user" class="auth-user hidden">
           <img id="auth-avatar" class="auth-avatar hidden" alt="" width="32" height="32" />
@@ -35,33 +35,43 @@
       </section>
 
       <div id="app-content" class="hidden">
-        <section id="api-key-section" class="panel">
-          <h2>1. Vision APIキー</h2>
+        <section id="docai-section" class="panel">
+          <h2>1. Document AI 設定</h2>
           <p>
-            Google Cloud で発行した APIキーを入力してください。このブラウザの localStorage
-            に保存されます（サーバーには送られません）。キーには HTTPリファラ制限を付け、Vision
-            の月次クォータを 1000 に設定することを推奨します。
+            プロセッサ設定（秘密情報ではありません）を確認し、Google
+            アカウントで Document AI の利用を許可してください。アクセストークンはメモリにだけ保持し、ページを閉じると消えます。
           </p>
-          <div class="api-key-row">
-            <input
-              type="password"
-              id="api-key-input"
-              autocomplete="off"
-              spellcheck="false"
-              placeholder="AIza..."
-            />
-            <button id="api-key-save" type="button">保存</button>
-            <button id="api-key-clear" type="button" class="danger">削除</button>
+          <div class="processor-grid">
+            <label>
+              プロジェクト ID
+              <input type="text" id="processor-project-id" autocomplete="off" spellcheck="false" />
+            </label>
+            <label>
+              リージョン
+              <input type="text" id="processor-location" autocomplete="off" spellcheck="false" />
+            </label>
+            <label>
+              プロセッサ ID
+              <input type="text" id="processor-id" autocomplete="off" spellcheck="false" />
+            </label>
           </div>
-          <div id="api-key-status" class="status"></div>
+          <div class="api-key-row">
+            <button id="processor-save" type="button">設定を保存</button>
+            <button id="docai-authorize" type="button">Document AI を許可</button>
+            <button id="docai-revoke" type="button" class="danger">許可をクリア</button>
+          </div>
+          <div id="processor-status" class="status"></div>
+          <div id="oauth-status" class="status"></div>
           <div id="quota-status" class="hint"></div>
         </section>
 
         <section id="load-section" class="panel">
           <h2>2. レシート画像を読み込む</h2>
           <p>
-            JPEG / PNG / WebP / GIF の画像を複数選択できます。無料枠（月
-            <span id="quota-limit-label">1000</span> 枚）を超える分は処理しません。
+            JPEG / PNG / WebP / GIF の画像を複数選択できます。アプリ側の月次上限（
+            <span id="quota-limit-label">200</span>
+            枚、UTC月）を超える分は処理しません。Document AI に Always Free
+            はないため、GCP の予算アラートも設定してください。
           </p>
           <label id="dropzone" class="dropzone" for="file-input">
             <p>ここにレシート画像をドラッグ＆ドロップ</p>

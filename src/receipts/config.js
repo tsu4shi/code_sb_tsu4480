@@ -1,15 +1,26 @@
-/** Free-tier guardrails and storage keys for the receipts OCR tool. */
+/** Document AI (Expense Parser) config and soft monthly usage guardrails. */
 
-/** Google Cloud Vision free tier: first 1000 units/month per feature. */
-export const FREE_TIER_MONTHLY_LIMIT = 1000;
+/**
+ * Soft monthly cap (UTC month) to limit accidental spend.
+ * Document AI has no Always Free tier — this is an app-side safety limit only.
+ */
+export const MONTHLY_SOFT_LIMIT = 200;
 
-/** localStorage key for the user-provided Vision API key. */
-export const API_KEY_STORAGE_KEY = "receipts:visionApiKey:v1";
+/** @deprecated Use MONTHLY_SOFT_LIMIT. Kept for older imports/tests. */
+export const FREE_TIER_MONTHLY_LIMIT = MONTHLY_SOFT_LIMIT;
+
+/** localStorage key for Document AI processor settings (not secrets). */
+export const PROCESSOR_CONFIG_STORAGE_KEY = "receipts:documentAiProcessor:v1";
 
 /** localStorage key for monthly OCR usage counters. */
-export const QUOTA_STORAGE_KEY = "receipts:visionQuota:v1";
+export const QUOTA_STORAGE_KEY = "receipts:documentAiQuota:v1";
 
-/** Vision feature used for receipt OCR (counts against its own free quota). */
-export const VISION_FEATURE = "DOCUMENT_TEXT_DETECTION";
+/** OAuth scope required by Document AI processDocument. */
+export const DOCUMENT_AI_OAUTH_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
 
-export const VISION_ANNOTATE_URL = "https://vision.googleapis.com/v1/images:annotate";
+/** Default processor settings for this project's Expense Parser. */
+export const DEFAULT_PROCESSOR_CONFIG = {
+  projectId: "project-85ebb717-8d08-418b-a5e",
+  location: "asia-southeast1",
+  processorId: "24d5014949bfd930",
+};
