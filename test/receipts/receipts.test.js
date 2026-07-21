@@ -70,6 +70,41 @@ PayPayでお支払い
     assert.equal(parsed.items[0].amount, 500);
     assert.match(parsed.items[0].itemName, /合計/);
   });
+  it("parses a DCM-style Japanese hardware-store receipt", () => {
+    const text = `
+ＤＣＭ入間下藤沢店
+TEL 04-2964-1565
+登録番号 T7010701039115
+領収証
+2026年07月21日(火) 16:21
+レジ 0001 ナカヤマ
+003 花と野菜の液体肥料８００ｍｌ ¥437
+合計 ¥437
+税合計 ¥39
+(内10%対象額 ¥437)
+(内10%税額 ¥39)
+クレジット ¥437
+お買上点数 1点
+レシートNo7709
+`.trim();
+    const parsed = parseReceiptText(text, { receiptId: "r_dcm", sourceFile: "dcm.jpg" });
+    assert.equal(parsed.date, "2026-07-21");
+    assert.match(parsed.storeName, /ＤＣＭ入間下藤沢店|DCM入間下藤沢店/);
+    assert.equal(parsed.paymentMethod, "クレジット");
+    assert.equal(parsed.total, 437);
+    assert.equal(parsed.items.length, 1);
+    assert.match(parsed.items[0].itemName, /花と野菜の液体肥料/);
+    assert.equal(parsed.items[0].amount, 437);
+    assert.equal(parsed.items[0].paymentMethod, "クレジット");
+  });
+
+  it("pairs description line with following price-only line", () => {
+    const text = `サンプル店\n2024/01/02\n牛乳\n¥198\n合計 198\n現金`;
+    const parsed = parseReceiptText(text, { receiptId: "r_cont" });
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].itemName, "牛乳");
+    assert.equal(parsed.items[0].amount, 198);
+  });
 });
 
 describe("parseExpenseDocument", () => {
@@ -195,6 +230,45 @@ describe("parseExpenseDocument", () => {
       { receiptId: "r_jpy" }
     );
     assert.equal(parsed.total, 100);
+  });
+
+  it("falls back to OCR text when Expense Parser date/line items are weak", () => {
+    const text = `
+ＤＣＭ入間下藤沢店
+2026年07月21日(火) 16:21
+003 花と野菜の液体肥料８００ｍｌ ¥437
+合計 ¥437
+クレジット ¥437
+`.trim();
+    const parsed = parseExpenseDocument(
+      {
+        text,
+        entities: [
+          { type: "supplier_name", mentionText: "ＤＣＭ入間下藤沢店" },
+          // Year-only normalized date (bug seen in production)
+          { type: "receipt_date", mentionText: "2026", normalizedValue: { text: "2026" } },
+          {
+            type: "line_item",
+            mentionText: "35",
+            properties: [
+              { type: "line_item/description", mentionText: "35" },
+              {
+                type: "line_item/amount",
+                mentionText: "35",
+                normalizedValue: { moneyValue: { currencyCode: "JPY", units: "35" } },
+              },
+            ],
+          },
+        ],
+      },
+      { receiptId: "r_weak", sourceFile: "dcm.jpg" }
+    );
+    assert.equal(parsed.date, "2026-07-21");
+    assert.match(parsed.storeName, /ＤＣＭ/);
+    assert.equal(parsed.paymentMethod, "クレジット");
+    assert.equal(parsed.items.length, 1);
+    assert.match(parsed.items[0].itemName, /花と野菜/);
+    assert.equal(parsed.items[0].amount, 437);
   });
 
   it("normalizes common payment labels", () => {
