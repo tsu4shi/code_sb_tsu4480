@@ -1,11 +1,23 @@
 import { requireAuth } from "../kakeibo/auth.js";
-import { clearApiKey, getApiKey, maskApiKey, setApiKey } from "./apiKeyStore.js";
-import { FREE_TIER_MONTHLY_LIMIT } from "./config.js";
+import { MONTHLY_SOFT_LIMIT } from "./config.js";
+import { processExpenseDocument } from "./documentAiClient.js";
 import { ConfigError, QuotaError } from "./errors.js";
-import { parseReceiptText } from "./parseReceiptText.js";
+import { imageToBase64 } from "./imageBase64.js";
+import {
+  clearAccessToken,
+  ensureAccessToken,
+  getAccessToken,
+  hasValidAccessToken,
+  requestDocumentAiAccessToken,
+} from "./oauthAccessToken.js";
+import { parseExpenseDocument } from "./parseExpenseDocument.js";
+import {
+  getProcessorConfig,
+  isProcessorConfigComplete,
+  setProcessorConfig,
+} from "./processorConfigStore.js";
 import { getQuotaStatus, planBatch, recordUsage } from "./quota.js";
 import { buildReceiptCsv } from "./receiptCsv.js";
-import { annotateDocumentText, imageToBase64 } from "./visionClient.js";
 
 /** @type {object[]} */
 let rows = [];
@@ -35,18 +47,41 @@ function setStatus(el, message, isError = false) {
   el.classList.toggle("error", Boolean(isError && message));
 }
 
-function refreshApiKeyUi() {
-  const key = getApiKey();
-  const input = $("api-key-input");
-  if (input && document.activeElement !== input) {
-    input.value = key;
-  }
-  if (key) {
-    setStatus($("api-key-status"), `保存済み: ${maskApiKey(key)}`);
+function readProcessorForm() {
+  return {
+    projectId: $("processor-project-id")?.value || "",
+    location: $("processor-location")?.value || "",
+    processorId: $("processor-id")?.value || "",
+  };
+}
+
+function fillProcessorForm(config) {
+  if ($("processor-project-id")) $("processor-project-id").value = config.projectId || "";
+  if ($("processor-location")) $("processor-location").value = config.location || "";
+  if ($("processor-id")) $("processor-id").value = config.processorId || "";
+}
+
+function refreshProcessorUi() {
+  const config = getProcessorConfig();
+  fillProcessorForm(config);
+  if (isProcessorConfigComplete(config)) {
+    setStatus(
+      $("processor-status"),
+      `設定済み: ${config.projectId} / ${config.location} / ${config.processorId}`
+    );
   } else {
-    setStatus($("api-key-status"), "未設定");
+    setStatus($("processor-status"), "プロセッサ設定が不完全です", true);
   }
+  refreshOAuthUi();
   refreshQuotaUi();
+}
+
+function refreshOAuthUi() {
+  if (hasValidAccessToken()) {
+    setStatus($("oauth-status"), "Document AI 利用許可済み（トークンはメモリのみ）");
+  } else {
+    setStatus($("oauth-status"), "未許可 — 「Document AI を許可」を押してください");
+  }
 }
 
 function refreshQuotaUi() {
@@ -56,21 +91,37 @@ function refreshQuotaUi() {
     el.textContent = `今月のOCR使用量（UTC）: ${status.used} / ${status.limit}（残り ${status.remaining}）`;
   }
   const limitLabel = $("quota-limit-label");
-  if (limitLabel) limitLabel.textContent = String(FREE_TIER_MONTHLY_LIMIT);
+  if (limitLabel) limitLabel.textContent = String(MONTHLY_SOFT_LIMIT);
 }
 
-function wireApiKey() {
-  $("api-key-save")?.addEventListener("click", () => {
-    const value = $("api-key-input")?.value || "";
-    setApiKey(value);
-    refreshApiKeyUi();
-    setStatus($("api-key-status"), getApiKey() ? `保存しました: ${maskApiKey(getApiKey())}` : "削除しました");
+function wireDocAiControls() {
+  $("processor-save")?.addEventListener("click", () => {
+    const next = setProcessorConfig(readProcessorForm());
+    refreshProcessorUi();
+    setStatus(
+      $("processor-status"),
+      isProcessorConfigComplete(next)
+        ? `保存しました: ${next.projectId} / ${next.location} / ${next.processorId}`
+        : "保存しましたが設定が不完全です",
+      !isProcessorConfigComplete(next)
+    );
   });
-  $("api-key-clear")?.addEventListener("click", () => {
-    clearApiKey();
-    if ($("api-key-input")) $("api-key-input").value = "";
-    refreshApiKeyUi();
-    setStatus($("api-key-status"), "削除しました");
+
+  $("docai-authorize")?.addEventListener("click", async () => {
+    try {
+      await requestDocumentAiAccessToken({ prompt: "consent" });
+      refreshOAuthUi();
+      setStatus($("oauth-status"), "許可しました（トークンはメモリのみ）");
+    } catch (err) {
+      refreshOAuthUi();
+      setStatus($("oauth-status"), err.message || String(err), true);
+    }
+  });
+
+  $("docai-revoke")?.addEventListener("click", () => {
+    clearAccessToken();
+    refreshOAuthUi();
+    setStatus($("oauth-status"), "許可をクリアしました");
   });
 }
 
@@ -89,9 +140,11 @@ function filterImageFiles(fileList) {
  * @param {File[]} files
  */
 async function processFiles(files) {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    throw new ConfigError("先に Vision APIキーを保存してください");
+  // Persist any unsaved form edits so drop/select uses what the user sees.
+  const processor = setProcessorConfig(readProcessorForm());
+  refreshProcessorUi();
+  if (!isProcessorConfigComplete(processor)) {
+    throw new ConfigError("先に Document AI のプロセッサ設定を保存してください");
   }
   if (!files.length) {
     setStatus($("load-status"), "画像ファイルが見つかりませんでした", true);
@@ -101,26 +154,51 @@ async function processFiles(files) {
   const plan = planBatch(files.length);
   if (plan.allowed === 0) {
     throw new QuotaError(
-      `今月の無料枠（${plan.status.limit}枚）を使い切っています。GCPのクォータ設定も確認してください。`
+      `今月のアプリ上限（${plan.status.limit}枚）を使い切っています。GCP の予算・割り当て設定も確認してください。`
     );
   }
+
+  // User gesture path (file choose / drop) — safe to prompt for token if missing.
+  await ensureAccessToken();
+  refreshOAuthUi();
 
   const toProcess = files.slice(0, plan.allowed);
   const skipped = files.length - toProcess.length;
   const statusEl = $("load-status");
   let ok = 0;
   let failed = 0;
+  /** @type {string} */
+  let lastError = "";
+  let stoppedForAuth = false;
 
   for (let i = 0; i < toProcess.length; i++) {
     const file = toProcess[i];
     setStatus(statusEl, `OCR中… ${i + 1}/${toProcess.length}: ${file.name}`);
     try {
+      // Do not re-prompt mid-batch (no guaranteed user gesture). Token was
+      // obtained above; a 401 below stops the batch instead.
+      const accessToken = getAccessToken();
+      if (!accessToken) {
+        clearAccessToken();
+        refreshOAuthUi();
+        failed += 1;
+        lastError =
+          "Document AI のトークンがありません。「Document AI を許可」を押してから再実行してください。";
+        stoppedForAuth = true;
+        break;
+      }
       const base64 = await imageToBase64(file);
-      const { fullText } = await annotateDocumentText({ apiKey, imageBase64: base64 });
+      const { document } = await processExpenseDocument({
+        accessToken,
+        processor,
+        imageBase64: base64,
+        mimeType: file.type,
+        fileName: file.name,
+      });
       recordUsage(1);
       refreshQuotaUi();
 
-      const parsed = parseReceiptText(fullText, {
+      const parsed = parseExpenseDocument(document, {
         sourceFile: file.name,
         receiptId: `r_${Date.now().toString(36)}_${i}`,
       });
@@ -129,14 +207,26 @@ async function processFiles(files) {
       renderTable();
     } catch (err) {
       failed += 1;
-      console.warn("receipt OCR failed", file.name, err?.code || "", err?.message || err);
+      lastError = err?.message || String(err);
+      console.warn("receipt OCR failed", file.name, err?.code || "", lastError);
+      if (err?.status === 401) {
+        clearAccessToken();
+        refreshOAuthUi();
+        stoppedForAuth = true;
+        break;
+      }
     }
   }
 
   const parts = [`完了: 成功 ${ok}件`];
   if (failed) parts.push(`失敗 ${failed}件`);
-  if (skipped) parts.push(`無料枠超過のためスキップ ${skipped}件`);
-  setStatus(statusEl, parts.join(" / "), failed > 0 || skipped > 0);
+  if (skipped) parts.push(`月次上限超過のためスキップ ${skipped}件`);
+  if (stoppedForAuth) {
+    parts.push("認証切れのため中断 — 「Document AI を許可」して再実行してください");
+  } else if (failed && lastError) {
+    parts.push(`（例: ${lastError}）`);
+  }
+  setStatus(statusEl, parts.join(" / "), failed > 0 || skipped > 0 || stoppedForAuth);
 }
 
 function wireDropzone() {
@@ -256,7 +346,7 @@ function wireToolbar() {
 
   $("clear-rows")?.addEventListener("click", () => {
     if (!rows.length) return;
-    if (!window.confirm("表示中の明細をすべてクリアしますか？（APIキーと使用量カウンタは残ります）")) {
+    if (!window.confirm("表示中の明細をすべてクリアしますか？（プロセッサ設定と使用量カウンタは残ります）")) {
       return;
     }
     rows = [];
@@ -266,10 +356,15 @@ function wireToolbar() {
 }
 
 async function main() {
-  wireApiKey();
+  wireDocAiControls();
   wireDropzone();
   wireToolbar();
-  refreshApiKeyUi();
+  refreshProcessorUi();
+
+  $("auth-signout")?.addEventListener("click", () => {
+    clearAccessToken();
+    refreshOAuthUi();
+  });
 
   try {
     await requireAuth();

@@ -125,7 +125,7 @@ function parseItemLine(line) {
 }
 
 /**
- * @param {string} text - full OCR text from Vision
+ * @param {string} text - full OCR text (legacy heuristic parser)
  * @param {object} [meta]
  * @param {string} [meta.sourceFile]
  * @param {string} [meta.receiptId]

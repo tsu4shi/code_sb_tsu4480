@@ -1,5 +1,5 @@
 ---
-description: Rules for developing the receipt OCR import tool (Google Vision)
+description: Rules for developing the receipt OCR import tool (Google Document AI)
 globs:
   - src/receipts/**
   - test/receipts/**
@@ -11,7 +11,7 @@ globs:
 
 ## Scope
 
-- Build and maintain **receipt image → OCR → editable table → CSV export** only.
+- Build and maintain **receipt image → Document AI → editable table → CSV export** only.
 - Do not add kakeibo reconciliation/matching UI until explicitly requested.
 - Keep independent from the Parcel demo (`src/index3.js`) and `src/news/**`.
 - Reuse kakeibo Google Sign-In (`src/kakeibo/auth.js`) for access gating; do not
@@ -19,34 +19,46 @@ globs:
 
 ## Privacy (critical)
 
-- Receipt images are sent to **Google Cloud Vision** for OCR — this is intentional
+- Receipt images are sent to **Google Cloud Document AI** for OCR — this is intentional
   and must stay clearly disclosed in the UI and docs.
 - **Never commit** real receipt images, OCR dumps, or exported receipt CSVs.
-- The Vision API key must **never** be hardcoded or committed. Users enter it in
-  the UI; store only in `localStorage` (`receipts:visionApiKey:v1`).
-- Do not log API keys or full OCR text in production UI paths; status messages
+- **Never** store service-account JSON or long-lived API keys in the browser or repo.
+  Document AI calls use a short-lived OAuth access token kept **in memory only**.
+- Processor IDs / project ID / region are not secrets and may be stored in
+  `localStorage` (`receipts:documentAiProcessor:v1`).
+- Do not log access tokens or full OCR text in production UI paths; status messages
   should use file counts / error codes.
 
-## Free-tier guardrails
+## Auth (Plan A)
 
-- Default monthly cap is `FREE_TIER_MONTHLY_LIMIT` (1000) in `config.js`.
-- Always check `planBatch` / remaining quota **before** calling Vision.
-- Increment usage only after a successful Vision response.
-- Document that users should also set a GCP quota ceiling.
+- Gate UI with existing allowlisted Google Sign-In (ID token).
+- Separately obtain a Document AI access token via GIS `initTokenClient` with
+  scope `https://www.googleapis.com/auth/cloud-platform`.
+- Token must not be written to `localStorage` / `sessionStorage`.
+- Clear the in-memory token on logout / 401.
+
+## Soft spend guardrails
+
+- Default monthly soft cap is `MONTHLY_SOFT_LIMIT` in `config.js` (not an Always Free quota).
+- Always check `planBatch` / remaining quota **before** calling Document AI.
+- Increment usage only after a successful Document AI response.
+- Document that users should also set a GCP budget alert.
 
 ## Data model
 
-- Core parsing/CSV helpers (`parseReceiptText.js`, `receiptCsv.js`, `quota.js`,
-  `config.js`, `errors.js`) must stay framework-agnostic plain JS (no DOM) so
-  unit tests can run under `node --test`.
+- Core parsing/CSV helpers (`parseExpenseDocument.js`, `parseReceiptText.js`,
+  `receiptCsv.js`, `quota.js`, `config.js`, `errors.js`, `documentAiClient.js`)
+  must stay framework-agnostic plain JS (no DOM) where possible so unit tests can
+  run under `node --test`. `oauthAccessToken.js` is browser-only.
 - v1 granularity is **one CSV row per line item** (not one row per receipt).
 - `receiptId` groups lines from the same image; preserve it on export.
 - CSV columns live in `RECEIPT_CSV_HEADER` — keep export and docs in sync.
 
 ## Testing
 
-- Add/keep unit tests in `test/receipts/` for parsers, CSV, and quota math.
-- Use fabricated OCR text only — never real merchant receipts as fixtures.
+- Add/keep unit tests in `test/receipts/` for parsers, CSV, quota math, and
+  Expense Parser entity mapping.
+- Use fabricated OCR / Document AI payloads only — never real merchant receipts.
 
 ## UI
 

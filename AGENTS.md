@@ -63,26 +63,26 @@ A separate **browser tool + Node CLI** for combining MoneyForward ME "収入・�
 
 ## Receipts OCR tool
 
-A separate **browser tool** that batch-loads receipt images, runs Google Cloud Vision OCR, shows editable line-item rows, and exports CSV. Independent of the Parcel demo, news tool, and (for now) kakeibo reconciliation.
+A separate **browser tool** that batch-loads receipt images, runs Google Cloud Document AI (Expense Parser), shows editable line-item rows, and exports CSV. Independent of the Parcel demo, news tool, and (for now) kakeibo reconciliation.
 
 - Browser entry: `receipts.html` → `src/receipts/receiptsApp.js` (run via `npm run receipts`, port **1236**)
-- Core modules: `src/receipts/parseReceiptText.js`, `visionClient.js`, `receiptCsv.js`, `quota.js`, `apiKeyStore.js`, `config.js`, `errors.js`
-- Reuses kakeibo Google Sign-In (`src/kakeibo/auth.js` + `syncAuthConfig.js`)
+- Core modules: `src/receipts/parseExpenseDocument.js`, `documentAiClient.js`, `oauthAccessToken.js`, `processorConfigStore.js`, `parseReceiptText.js`, `receiptCsv.js`, `quota.js`, `config.js`, `errors.js`
+- Reuses kakeibo Google Sign-In (`src/kakeibo/auth.js` + `syncAuthConfig.js`) plus a separate GIS OAuth access-token grant for Document AI
 - Human docs: `docs/receipts.md`
 - Agent rules: `.cursor/rules/receipts.mdc`
 - Tests: `test/receipts/receipts.test.js` (`npm test`)
 
 ### Environment / secrets
 
-1. `GOOGLE_CLIENT_ID` in `.env` (same as kakeibo) for login
-2. Vision API key is entered in the UI and stored in **browser localStorage only** — never commit it, never put it in `.env` for this static-site design
-3. Recommend HTTP referrer restrictions on the key and a GCP monthly quota ceiling of 1000
+1. `GOOGLE_CLIENT_ID` in `.env` (same as kakeibo) for login + Document AI OAuth
+2. **Do not** store service-account JSON or API keys in the browser or `.env` for this static-site design — Document AI uses a short-lived OAuth access token kept in memory only
+3. Processor project/location/id may be stored in `localStorage` (not secrets). Recommend a GCP budget alert (no Always Free tier)
 
 ### Verification
 
-- Unit tests cover parsing / CSV / quota math
-- Manual: `npm run receipts` → save a Vision key → drop sample images → confirm table + CSV download
-- Without a key, expect a clear config error; when monthly counter is exhausted, expect a quota stop (no Vision call)
+- Unit tests cover Expense Parser mapping / CSV / quota math
+- Manual: `npm run receipts` → confirm processor settings → authorize Document AI → drop sample images → confirm table + CSV download
+- Without OAuth consent or incomplete processor config, expect a typed `ConfigError`; when the monthly soft counter is exhausted, expect a quota stop (no Document AI call)
 
 ### Scope limits
 

@@ -34,8 +34,8 @@ jobs:
 
       - name: Build static site (Parcel demo + kakeibo + receipts)
         # All entries are client-side (no backend). Receipt OCR calls Google
-        # Vision from the browser with a user-provided API key. The base path
-        # matches this repo's GitHub Pages project URL.
+        # Document AI from the browser with a short-lived OAuth access token
+        # (memory only). The base path matches this repo's GitHub Pages project URL.
         run: npx parcel build index.html kakeibo.html receipts.html --out-dir dist --public-url /${{ github.event.repository.name }}/
 
       - uses: actions/configure-pages@v5

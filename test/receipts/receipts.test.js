@@ -9,7 +9,9 @@ import {
   parseAmount,
   parseReceiptText,
 } from "../../src/receipts/parseReceiptText.js";
-import { FREE_TIER_MONTHLY_LIMIT } from "../../src/receipts/config.js";
+import { normalizePaymentType, parseExpenseDocument } from "../../src/receipts/parseExpenseDocument.js";
+import { buildProcessUrl } from "../../src/receipts/documentAiClient.js";
+import { MONTHLY_SOFT_LIMIT } from "../../src/receipts/config.js";
 import { currentMonthKey, getQuotaStatus, planBatch, readQuota, recordUsage, writeQuota } from "../../src/receipts/quota.js";
 
 describe("parseAmount", () => {
@@ -70,6 +72,151 @@ PayPayでお支払い
   });
 });
 
+describe("parseExpenseDocument", () => {
+  const sampleDoc = {
+    text: "スーパーサンプル店\n牛乳 198\n合計 383",
+    entities: [
+      { type: "supplier_name", mentionText: "スーパーサンプル店" },
+      {
+        type: "receipt_date",
+        mentionText: "2024/07/15",
+        normalizedValue: {
+          text: "2024-07-15",
+          dateValue: { year: 2024, month: 7, day: 15 },
+        },
+      },
+      {
+        type: "total_amount",
+        mentionText: "383",
+        normalizedValue: { moneyValue: { currencyCode: "JPY", units: "383" } },
+      },
+      { type: "payment_type", mentionText: "PayPay" },
+      {
+        type: "line_item",
+        mentionText: "牛乳 198",
+        properties: [
+          { type: "line_item/description", mentionText: "牛乳" },
+          {
+            type: "line_item/amount",
+            mentionText: "198",
+            normalizedValue: { moneyValue: { currencyCode: "JPY", units: "198" } },
+          },
+        ],
+      },
+      {
+        type: "line_item",
+        mentionText: "食パン 150",
+        properties: [
+          { type: "line_item/description", mentionText: "食パン" },
+          { type: "line_item/amount", mentionText: "150" },
+          { type: "line_item/quantity", mentionText: "1" },
+        ],
+      },
+    ],
+  };
+
+  it("maps Expense Parser entities to editable line items", () => {
+    const parsed = parseExpenseDocument(sampleDoc, {
+      sourceFile: "sample.jpg",
+      receiptId: "r_docai",
+    });
+    assert.equal(parsed.date, "2024-07-15");
+    assert.equal(parsed.storeName, "スーパーサンプル店");
+    assert.equal(parsed.paymentMethod, "PayPay");
+    assert.equal(parsed.total, 383);
+    assert.equal(parsed.items.length, 2);
+    assert.equal(parsed.items[0].itemName, "牛乳");
+    assert.equal(parsed.items[0].amount, 198);
+    assert.equal(parsed.items[1].itemName, "食パン");
+    assert.equal(parsed.items[1].amount, 150);
+    assert.equal(parsed.items[1].quantity, "1");
+    assert.equal(parsed.items[0].sourceFile, "sample.jpg");
+    assert.equal(parsed.items[0].receiptId, "r_docai");
+  });
+
+  it("falls back to a total row when no line_item entities exist", () => {
+    const parsed = parseExpenseDocument(
+      {
+        entities: [
+          { type: "supplier_name", mentionText: "店A" },
+          {
+            type: "total_amount",
+            mentionText: "500",
+            normalizedValue: { moneyValue: { units: "500" } },
+          },
+        ],
+      },
+      { receiptId: "r_total_only" }
+    );
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].amount, 500);
+    assert.match(parsed.items[0].itemName, /合計/);
+  });
+
+  it("ignores line_item/payment_amount when reading line amount", () => {
+    const parsed = parseExpenseDocument(
+      {
+        entities: [
+          {
+            type: "line_item",
+            mentionText: "牛乳",
+            properties: [
+              { type: "line_item/description", mentionText: "牛乳" },
+              {
+                type: "line_item/payment_amount",
+                mentionText: "9999",
+                normalizedValue: { moneyValue: { currencyCode: "JPY", units: "9999" } },
+              },
+              {
+                type: "line_item/amount",
+                mentionText: "198",
+                normalizedValue: { moneyValue: { currencyCode: "JPY", units: "198" } },
+              },
+            ],
+          },
+        ],
+      },
+      { receiptId: "r_pay_amt" }
+    );
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].amount, 198);
+  });
+
+  it("rounds JPY money values to whole yen", () => {
+    const parsed = parseExpenseDocument(
+      {
+        entities: [
+          {
+            type: "total_amount",
+            normalizedValue: { moneyValue: { currencyCode: "JPY", units: "100", nanos: 1 } },
+          },
+        ],
+      },
+      { receiptId: "r_jpy" }
+    );
+    assert.equal(parsed.total, 100);
+  });
+
+  it("normalizes common payment labels", () => {
+    assert.equal(normalizePaymentType("クレジットカード"), "クレジット");
+    assert.equal(normalizePaymentType("現金でお支払い"), "現金");
+  });
+});
+
+describe("buildProcessUrl", () => {
+  it("builds the regional process endpoint", () => {
+    const url = buildProcessUrl({
+      projectId: "project-85ebb717-8d08-418b-a5e",
+      location: "asia-southeast1",
+      processorId: "24d5014949bfd930",
+    });
+    assert.equal(
+      url,
+      "https://asia-southeast1-documentai.googleapis.com/v1/projects/project-85ebb717-8d08-418b-a5e/locations/asia-southeast1/processors/24d5014949bfd930:process"
+    );
+  });
+});
+
 describe("buildReceiptCsv", () => {
   it("emits UTF-8 BOM, header, and escaped fields", () => {
     const csv = buildReceiptCsv([
@@ -103,9 +250,9 @@ describe("quota helpers", () => {
     removeItem: (k) => store.delete(k),
   };
 
-  it("tracks remaining capacity against the free-tier limit", () => {
+  it("tracks remaining capacity against the soft monthly limit", () => {
     store.clear();
-    writeQuota(FREE_TIER_MONTHLY_LIMIT - 2);
+    writeQuota(MONTHLY_SOFT_LIMIT - 2);
     const plan = planBatch(5);
     assert.equal(plan.allowed, 2);
     assert.equal(plan.blocked, 3);

@@ -108,6 +108,7 @@ header h1 {
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
+  margin-top: 12px;
 }
 
 .api-key-row input[type="password"],
@@ -116,6 +117,27 @@ header h1 {
   min-width: 0;
   font-size: 0.9em;
   padding: 6px 8px;
+}
+
+.processor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.processor-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85em;
+  color: #555;
+}
+
+.processor-grid input {
+  font-size: 0.95em;
+  padding: 6px 8px;
+  color: #222;
 }
 
 .dropzone {
