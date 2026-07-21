@@ -5,9 +5,6 @@ import { ConfigError } from "./errors.js";
 /** @type {{ accessToken: string, expiresAt: number } | null} */
 let memoryToken = null;
 
-/** @type {ReturnType<typeof createTokenClient> | null} */
-let tokenClient = null;
-
 const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 
 /** @type {Promise<void> | null} */
@@ -65,20 +62,19 @@ function loadGoogleScript() {
   return gisScriptPromise;
 }
 
-function createTokenClient(callback) {
-  if (!GOOGLE_CLIENT_ID) {
-    throw new ConfigError(
-      "Googleログインが設定されていません。GOOGLE_CLIENT_ID を .env に設定し、npm run receipts を再実行してください。"
-    );
+/**
+ * @param {object} err
+ * @returns {string}
+ */
+function formatOauthUiError(err) {
+  const type = err?.type || "unknown";
+  if (type === "popup_closed") {
+    return "認可ポップアップが閉じられました。もう一度「Document AI を許可」を押してください。";
   }
-  if (!globalThis.google?.accounts?.oauth2?.initTokenClient) {
-    throw new ConfigError("Google Identity Services が利用できません");
+  if (type === "popup_failed_to_open") {
+    return "認可ポップアップを開けませんでした。ブラウザのポップアップブロックを確認してください。";
   }
-  return globalThis.google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: DOCUMENT_AI_OAUTH_SCOPE,
-    callback,
-  });
+  return `Document AI の認可UIエラー: ${type}`;
 }
 
 /**
@@ -91,12 +87,33 @@ function createTokenClient(callback) {
 export async function requestDocumentAiAccessToken(options = {}) {
   await loadGoogleScript();
 
+  if (!GOOGLE_CLIENT_ID) {
+    throw new ConfigError(
+      "Googleログインが設定されていません。GOOGLE_CLIENT_ID を .env に設定し、npm run receipts を再実行してください。"
+    );
+  }
+  if (!globalThis.google?.accounts?.oauth2?.initTokenClient) {
+    throw new ConfigError("Google Identity Services が利用できません");
+  }
+
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const settleReject = (err) => {
+      if (settled) return;
+      settled = true;
+      memoryToken = null;
+      reject(err instanceof ConfigError ? err : new ConfigError(err?.message || String(err)));
+    };
+    const settleResolve = (token) => {
+      if (settled) return;
+      settled = true;
+      resolve(token);
+    };
+
     /** @param {object} response */
     const onResponse = (response) => {
       if (response?.error) {
-        memoryToken = null;
-        reject(
+        settleReject(
           new ConfigError(
             response.error === "access_denied"
               ? "Document AI の利用が拒否されました。同意画面で許可してください。"
@@ -107,8 +124,7 @@ export async function requestDocumentAiAccessToken(options = {}) {
       }
       const accessToken = String(response?.access_token || "").trim();
       if (!accessToken) {
-        memoryToken = null;
-        reject(new ConfigError("アクセストークンを取得できませんでした"));
+        settleReject(new ConfigError("アクセストークンを取得できませんでした"));
         return;
       }
       const expiresInSec = Number(response.expires_in) || 3600;
@@ -116,27 +132,32 @@ export async function requestDocumentAiAccessToken(options = {}) {
         accessToken,
         expiresAt: Date.now() + expiresInSec * 1000,
       };
-      resolve(accessToken);
+      settleResolve(accessToken);
     };
 
     try {
-      if (!tokenClient) {
-        tokenClient = createTokenClient(onResponse);
-      } else {
-        // Re-bind callback for this request.
-        tokenClient = createTokenClient(onResponse);
-      }
-      tokenClient.requestAccessToken({
-        prompt: options.prompt ?? (hasValidAccessToken() ? "" : "consent"),
+      // Create a fresh client per request so callback/error_callback bind correctly.
+      const client = globalThis.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: DOCUMENT_AI_OAUTH_SCOPE,
+        callback: onResponse,
+        error_callback: (err) => {
+          settleReject(new ConfigError(formatOauthUiError(err)));
+        },
       });
+      // Prefer silent reuse when possible; force consent only when caller asks.
+      const prompt =
+        options.prompt !== undefined ? options.prompt : hasValidAccessToken() ? "" : "consent";
+      client.requestAccessToken({ prompt });
     } catch (err) {
-      reject(err instanceof ConfigError ? err : new ConfigError(err?.message || String(err)));
+      settleReject(err);
     }
   });
 }
 
 /**
  * Return a valid access token, prompting if needed.
+ * Must be called from a user gesture when a prompt is required.
  * @returns {Promise<string>}
  */
 export async function ensureAccessToken() {

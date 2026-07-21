@@ -153,6 +153,50 @@ describe("parseExpenseDocument", () => {
     assert.match(parsed.items[0].itemName, /合計/);
   });
 
+  it("ignores line_item/payment_amount when reading line amount", () => {
+    const parsed = parseExpenseDocument(
+      {
+        entities: [
+          {
+            type: "line_item",
+            mentionText: "牛乳",
+            properties: [
+              { type: "line_item/description", mentionText: "牛乳" },
+              {
+                type: "line_item/payment_amount",
+                mentionText: "9999",
+                normalizedValue: { moneyValue: { currencyCode: "JPY", units: "9999" } },
+              },
+              {
+                type: "line_item/amount",
+                mentionText: "198",
+                normalizedValue: { moneyValue: { currencyCode: "JPY", units: "198" } },
+              },
+            ],
+          },
+        ],
+      },
+      { receiptId: "r_pay_amt" }
+    );
+    assert.equal(parsed.items.length, 1);
+    assert.equal(parsed.items[0].amount, 198);
+  });
+
+  it("rounds JPY money values to whole yen", () => {
+    const parsed = parseExpenseDocument(
+      {
+        entities: [
+          {
+            type: "total_amount",
+            normalizedValue: { moneyValue: { currencyCode: "JPY", units: "100", nanos: 1 } },
+          },
+        ],
+      },
+      { receiptId: "r_jpy" }
+    );
+    assert.equal(parsed.total, 100);
+  });
+
   it("normalizes common payment labels", () => {
     assert.equal(normalizePaymentType("クレジットカード"), "クレジット");
     assert.equal(normalizePaymentType("現金でお支払い"), "現金");

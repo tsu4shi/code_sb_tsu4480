@@ -55,7 +55,13 @@ function entityAmount(entity) {
     const units = Number(money.units);
     const nanos = Number(money.nanos) || 0;
     if (Number.isFinite(units)) {
-      return units + nanos / 1e9;
+      const value = units + nanos / 1e9;
+      // Yen receipts are whole yen; avoid floating noise like 198.000000001.
+      const currency = String(money.currencyCode || "").toUpperCase();
+      if (currency === "JPY" || currency === "") {
+        return Math.round(value);
+      }
+      return value;
     }
   }
   const floatVal = entity.normalizedValue?.floatValue;
@@ -86,16 +92,18 @@ function parseLineItemProperties(lineItemEntity) {
   let unitPrice = "";
 
   for (const prop of props) {
+    // Match exact property types only — `endsWith("/amount")` wrongly matches
+    // `line_item/payment_amount`.
     const type = String(prop?.type || "");
-    if (type === "line_item/description" || type.endsWith("/description")) {
+    if (type === "line_item/description") {
       description = entityText(prop) || description;
-    } else if (type === "line_item/amount" || type.endsWith("/amount")) {
+    } else if (type === "line_item/amount") {
       amount = entityAmount(prop);
-    } else if (type === "line_item/quantity" || type.endsWith("/quantity")) {
+    } else if (type === "line_item/quantity") {
       quantity = entityText(prop);
-    } else if (type === "line_item/unit_price" || type.endsWith("/unit_price")) {
+    } else if (type === "line_item/unit_price") {
       unitPrice = entityText(prop);
-      if (!amount) amount = entityAmount(prop);
+      if (amount == null) amount = entityAmount(prop);
     }
   }
 

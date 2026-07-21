@@ -37,16 +37,3 @@ export class DocumentAiError extends ReceiptsError {
     this.status = status;
   }
 }
-
-/** @deprecated Use DocumentAiError */
-export class VisionApiError extends DocumentAiError {
-  /**
-   * @param {string} message
-   * @param {number} [status]
-   */
-  constructor(message, status = 0) {
-    super(message, status);
-    this.name = "VisionApiError";
-    this.code = "VISION_API_ERROR";
-  }
-}

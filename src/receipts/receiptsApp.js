@@ -6,6 +6,7 @@ import { imageToBase64 } from "./imageBase64.js";
 import {
   clearAccessToken,
   ensureAccessToken,
+  getAccessToken,
   hasValidAccessToken,
   requestDocumentAiAccessToken,
 } from "./oauthAccessToken.js";
@@ -139,7 +140,9 @@ function filterImageFiles(fileList) {
  * @param {File[]} files
  */
 async function processFiles(files) {
-  const processor = getProcessorConfig();
+  // Persist any unsaved form edits so drop/select uses what the user sees.
+  const processor = setProcessorConfig(readProcessorForm());
+  refreshProcessorUi();
   if (!isProcessorConfigComplete(processor)) {
     throw new ConfigError("先に Document AI のプロセッサ設定を保存してください");
   }
@@ -164,12 +167,26 @@ async function processFiles(files) {
   const statusEl = $("load-status");
   let ok = 0;
   let failed = 0;
+  /** @type {string} */
+  let lastError = "";
+  let stoppedForAuth = false;
 
   for (let i = 0; i < toProcess.length; i++) {
     const file = toProcess[i];
     setStatus(statusEl, `OCR中… ${i + 1}/${toProcess.length}: ${file.name}`);
     try {
-      const accessToken = await ensureAccessToken();
+      // Do not re-prompt mid-batch (no guaranteed user gesture). Token was
+      // obtained above; a 401 below stops the batch instead.
+      const accessToken = getAccessToken();
+      if (!accessToken) {
+        clearAccessToken();
+        refreshOAuthUi();
+        failed += 1;
+        lastError =
+          "Document AI のトークンがありません。「Document AI を許可」を押してから再実行してください。";
+        stoppedForAuth = true;
+        break;
+      }
       const base64 = await imageToBase64(file);
       const { document } = await processExpenseDocument({
         accessToken,
@@ -190,10 +207,13 @@ async function processFiles(files) {
       renderTable();
     } catch (err) {
       failed += 1;
-      console.warn("receipt OCR failed", file.name, err?.code || "", err?.message || err);
+      lastError = err?.message || String(err);
+      console.warn("receipt OCR failed", file.name, err?.code || "", lastError);
       if (err?.status === 401) {
         clearAccessToken();
         refreshOAuthUi();
+        stoppedForAuth = true;
+        break;
       }
     }
   }
@@ -201,7 +221,12 @@ async function processFiles(files) {
   const parts = [`完了: 成功 ${ok}件`];
   if (failed) parts.push(`失敗 ${failed}件`);
   if (skipped) parts.push(`月次上限超過のためスキップ ${skipped}件`);
-  setStatus(statusEl, parts.join(" / "), failed > 0 || skipped > 0);
+  if (stoppedForAuth) {
+    parts.push("認証切れのため中断 — 「Document AI を許可」して再実行してください");
+  } else if (failed && lastError) {
+    parts.push(`（例: ${lastError}）`);
+  }
+  setStatus(statusEl, parts.join(" / "), failed > 0 || skipped > 0 || stoppedForAuth);
 }
 
 function wireDropzone() {
